@@ -1,0 +1,13 @@
+node_modules
+dist
+data
+.env
+.env.*
+.superpowers
+docs
+README.md
+.git
+.gitignore
+*.log
+Dockerfile
+compose.yaml

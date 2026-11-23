@@ -1,0 +1,18 @@
+services:
+  atlas-career:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      HH_ACCESS_TOKEN: "${HH_ACCESS_TOKEN:-}"
+      HH_USER_AGENT: "${HH_USER_AGENT:-AtlasCareer/1.0 (local development)}"
+      GREENHOUSE_BOARDS: "${GREENHOUSE_BOARDS-discord}"
+      ASHBY_BOARDS: "${ASHBY_BOARDS-linear}"
+      LEVER_BOARDS: "${LEVER_BOARDS-leverdemo}"
+      TELEGRAM_CHANNELS: "${TELEGRAM_CHANNELS-job_python,remoteit,jobjava}"
+    volumes:
+      - atlas-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  atlas-data:
