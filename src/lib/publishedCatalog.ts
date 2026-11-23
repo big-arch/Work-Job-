@@ -1,5 +1,8 @@
 import type { SearchFilters, SourceHealth, Vacancy, VacancyResponse } from '../types'
+import { recentCheck, currentListing } from './freshness'
 import { boards, cityProviders, boardDetail } from '../../server/providers/cityBoards'
+import { fetchTrudvsem, trudDetail } from '../../server/providers/trudvsem'
+import { PartialListings } from '../../server/partialListings'
 import { normalizeSearch } from '../../server/normalize'
 import { catalogResponse } from './catalogResponse'
 import type { PublicCatalog } from './publicCatalogTypes'
@@ -9,12 +12,29 @@ let loadedAt = 0
 const liveBoards = new Map<string, { expires: number; jobs: Promise<Vacancy[]> }>()
 const rejectedJobs = new Set<string>()
 
+async function fetchCatalog() {
+  const path = import.meta.env.BASE_URL + 'feeds/catalog.json'
+  if (typeof DecompressionStream !== 'undefined') {
+    try {
+      const response = await fetch(path + '.gz',{cache:'no-cache'})
+      if (response.ok) {
+        const bytes = await response.arrayBuffer()
+        const header = new Uint8Array(bytes,0,2)
+        const unpacked = header[0] === 31 && header[1] === 139
+          ? new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))) : new Response(bytes)
+        return await unpacked.json() as PublicCatalog
+      }
+    } catch { /* Hosts and older releases may serve the uncompressed feed only. */ }
+  }
+  const response = await fetch(path, {cache:'no-cache'})
+  if(!response.ok) throw Error('Не удалось загрузить публичные ленты')
+  return await response.json() as PublicCatalog
+}
+
 function readCatalog() {
   if (!catalog || Date.now() - loadedAt > 5 * 60_000) {
     loadedAt = Date.now()
-    catalog = fetch(import.meta.env.BASE_URL + 'feeds/catalog.json', {cache:'no-cache'}).then(async response => {
-      if (!response.ok) throw Error('Не удалось загрузить публичные ленты')
-      const data = await response.json() as PublicCatalog
+    catalog = fetchCatalog().then(data => {
       if (data.version !== 1 || !Array.isArray(data.items)) throw Error('Неверный формат каталога')
       return data
     }).catch(error => { catalog = undefined; throw error })
@@ -26,7 +46,8 @@ function inSource(job: Vacancy, source: SearchFilters['source']) {
   return source === 'all' || source === job.source || (job.isTelegram && source === 'telegram:' + job.externalId.split(':')[0])
 }
 
-function liveListings(provider: typeof cityProviders[number], filters: SearchFilters, revision: number) {
+type LiveSource = Pick<typeof cityProviders[number], 'id' | 'fetch'>
+function liveListings(provider: LiveSource, filters: SearchFilters, revision: number) {
   const key = [revision, provider.id, normalizeSearch(filters.q)].join(':')
   const known = liveBoards.get(key)
   if (known && known.expires > Date.now()) return known.jobs
@@ -38,20 +59,25 @@ function liveListings(provider: typeof cityProviders[number], filters: SearchFil
 
 export async function publishedSearch(filters: SearchFilters, phase: 'cache' | 'live', revision: number): Promise<VacancyResponse> {
   const snapshot = await readCatalog()
-  const fresh = Date.now() - Date.parse(snapshot.fetchedAt) <= 48 * 3600_000
+  const fresh = recentCheck(snapshot.fetchedAt)
   const upstreamMatches = new Set(snapshot.matches[normalizeSearch(filters.q)] ?? [])
-  const sourceRows = new Map(snapshot.sources.map(s => [s.id, !fresh && s.status === 'online'
+  const sourceRows = new Map(snapshot.sources.map(s => [s.id, !fresh && (s.status === 'online' || s.status === 'degraded')
     ? {...s, status: 'unavailable' as const, count:0, error:'Срок проверки ленты истёк.'} : s]))
   let items = fresh ? snapshot.items.filter(job => inSource(job, filters.source) && !rejectedJobs.has(job.id)).map(job =>
     upstreamMatches.has(job.id) && filters.q ? {...job, matchedQuery:normalizeSearch(filters.q)} : job) : []
-  if (phase === 'live') {
-    const active = cityProviders.filter(p => filters.source === 'all' || filters.source === p.id)
+  if (phase === 'live' && (filters.q.trim() || !fresh || revision > 0 && filters.source !== 'all')) {
+    const direct: LiveSource[] = [...cityProviders]
+    if (filters.q.trim()) direct.push({id:'trudvsem',fetch:fetchTrudvsem})
+    const active = direct.filter(p => filters.source === 'all' || filters.source === p.id)
     const results = await Promise.all(active.map(async provider => {
       const health = sourceRows.get(provider.id)!
       try {
         const jobs = await liveListings(provider, filters, revision)
         return { id:provider.id, jobs, health:{...health,status:'online',error:null,count:jobs.length,fetchedAt:new Date().toISOString()} as SourceHealth }
-      } catch {
+      } catch (error) {
+        if (error instanceof PartialListings && error.jobs.length) {
+          return {id:provider.id,jobs:error.jobs,health:{...health,status:'degraded',count:error.jobs.length,error:error.message,fetchedAt:new Date().toISOString()} as SourceHealth}
+        }
         const count = items.filter(job=>job.source===provider.id).length
         return { id:provider.id, jobs:null, health:{...health,status:count?'degraded':'unavailable',count,error:'Прямое соединение с доской работодателя недоступно.'} as SourceHealth }
       }
@@ -64,7 +90,16 @@ export async function publishedSearch(filters: SearchFilters, phase: 'cache' | '
   return catalogResponse(items, filters, [...sourceRows.values()], snapshot.fetchedAt)
 }
 
-export async function publishedDetail(source: string, externalId: string) {
+export async function publishedDetail(source: string, externalId: string, registryKey: string | null = null) {
+  if(source==='trudvsem' && registryKey) {
+    try { return await trudDetail(registryKey) }
+    catch (error) {
+      if ([404,410].includes((error as {status?:number}).status ?? 0)) {
+        rejectedJobs.add(source+':'+externalId); throw Object.assign(Error('Запись снята'),{status:410})
+      }
+      throw error
+    }
+  }
   const board = boards.find(entry => entry.id === source)
   if (board && /^\d+$/.test(externalId)) {
     try { return await boardDetail(board, externalId) }
@@ -76,6 +111,9 @@ export async function publishedDetail(source: string, externalId: string) {
   }
   const snapshot = await readCatalog()
   const job = snapshot.items.find(item => item.source === source && item.externalId === externalId)
-  if (!job || Date.now()-Date.parse(snapshot.fetchedAt)>48*3600_000) throw Object.assign(Error('Публикация отсутствует в свежей ленте'),{status:410})
+  if (!recentCheck(snapshot.fetchedAt)) throw Error('Срок проверки ленты истёк.')
+  const providerId = source === 'telegram' ? 'telegram:' + externalId.split(':')[0] : source
+  if (!job && snapshot.sources.find(row=>row.id===providerId)?.status !== 'online') throw Error('Источник временно недоступен.')
+  if (!job || !currentListing(job)) throw Object.assign(Error('Публикации больше нет в актуальной выборке'),{status:410})
   return {description:job.description, url:job.url, verifiedAt:job.verifiedAt}
 }

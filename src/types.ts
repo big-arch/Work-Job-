@@ -1,4 +1,5 @@
-export type SourceId = 'hh' | 'remotive' | 'remoteok' | 'arbeitnow' | 'jobicy' | 'wwr' | 'greenhouse' | 'ashby' | 'lever' | 'telegram' | 'egis' | 'sixt' | 'endava' | 'aecom' | 'ramboll' | 'trudvsem' | 'habr' | 'superjob'
+export const sourceIds = ['hh', 'remotive', 'remoteok', 'arbeitnow', 'jobicy', 'wwr', 'greenhouse', 'ashby', 'lever', 'telegram', 'egis', 'sixt', 'endava', 'aecom', 'ramboll', 'trudvsem', 'habr', 'superjob', 'yandex', 'kaspersky'] as const
+export type SourceId = typeof sourceIds[number]
 export type Domain = 'it' | 'bim' | 'design' | 'other'
 export type WorkFormat = 'remote' | 'hybrid' | 'office' | 'unspecified'
 export type SourceStatus = 'online' | 'degraded' | 'unavailable' | 'disabled'
@@ -29,6 +30,7 @@ export interface Vacancy {
   domain: Domain
   salary: Salary
   publishedAt: string | null
+  validThrough?: string
   verifiedAt: string
   url: string
   applyUrl: string
@@ -45,6 +47,8 @@ export interface Vacancy {
 }
 
 export interface SearchFilters {
+  withSalary?: string
+  postedWithin?: string
   city?: string
   q: string
   domain: 'all' | Domain

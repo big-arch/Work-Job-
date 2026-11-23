@@ -15,7 +15,7 @@ export const appConfig = {
   hhAccessToken: process.env.HH_ACCESS_TOKEN?.trim() ?? '',
   hhUserAgent: process.env.HH_USER_AGENT?.trim() || 'WorkJob/0.1 (local development; vacancy aggregator)',
   greenhouseBoards: listEnv('GREENHOUSE_BOARDS', ['discord']),
-  ashbyBoards: listEnv('ASHBY_BOARDS', ['linear']),
+  ashbyBoards: listEnv('ASHBY_BOARDS', ['linear', 'notion', 'ramp']),
   leverBoards: listEnv('LEVER_BOARDS', []).filter(board => board.toLowerCase() !== 'leverdemo'),
   telegramGroups: listEnv('TELEGRAM_GROUPS', ['bimwork', 'bim_tim_work', 'architect_vacancies', 'arkhitektory_chat', 'vacancii_construction', 'architectsandconstructors', 'job_in_project']).map(name => name.toLowerCase()).filter(name => /^[a-z0-9_]{4,32}$/.test(name)),
   telegramChannels: listEnv('TELEGRAM_CHANNELS', ['bimvac', 'wasa_job', 'archhunterchannel', 'archhireglobal', 'haltura_arhitetura', 'job_python', 'remoteit', 'jobjava']).map(name => name.toLowerCase())

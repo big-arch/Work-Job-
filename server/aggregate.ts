@@ -4,25 +4,14 @@ import { catalogResponse } from '../src/lib/catalogResponse'
 import { errorMessage, normalizeSearch } from './normalize'
 import type { ProviderDefinition } from './registry'
 import type { Vacancy } from '../src/types'
+import { mapLimit } from './mapLimit'
+import { PartialListings } from './partialListings'
 import { providers, restrictedSources } from './registry'
 
 
 const cache = loadCache()
 const latestHealth = new Map<string, SourceHealth>()
 
-async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>) {
-  const results = new Array<R>(items.length)
-  let cursor = 0
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor
-      cursor += 1
-      results[index] = await task(items[index])
-    }
-  })
-  await Promise.all(workers)
-  return results
-}
 
 type Batch = { jobs: Vacancy[]; health: SourceHealth }
 const pending = new Map<string, Promise<Batch>>()
@@ -54,7 +43,8 @@ function providerBatch(provider: ProviderDefinition, filters: SearchFilters, cac
     failures.delete(key)
     return batch(jobs, 'online', fetchedAt, null)
   }).catch(error => {
-    const result = batch([], 'unavailable', null, errorMessage(error))
+    const partial = error instanceof PartialListings && error.jobs.length > 0
+    const result = batch(partial ? error.jobs : [], partial ? 'degraded' : 'unavailable', partial ? new Date().toISOString() : null, errorMessage(error))
     failures.set(key, { result, at: Date.now() })
     return result
   }).finally(() => pending.delete(key))

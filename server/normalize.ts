@@ -8,7 +8,7 @@ const itPattern = /\b(software|developer|programmer|разработчик|пр�
 
 const bimAlias = /(?<![\p{L}\d])(?:бим|тим|bim)(?![\p{L}\d])|информационн\p{L}*\s+моделирован\p{L}*|building information model(?:l?ing)?/giu
 export function normalizeSearch(value: string) {
-  return value.toLowerCase().replace(bimAlias, 'bim').trim()
+  return value.toLowerCase().replace(/тим[ -]лид/gu,'team lead').replace(bimAlias, 'bim').trim()
 }
 
 export function detectDomain(title: string, _description = '', tags: string[] = []): Domain {
@@ -18,6 +18,8 @@ export function detectDomain(title: string, _description = '', tags: string[] = 
   const genericRole = /(front-?end|back-?end|full-?stack)/i.test(title) && !/developer|engineer|programmer|разработчик|программист|инженер/i.test(title)
   if (nonTechnical.test(title) || genericRole) return 'other'
   if (/\b(civil|structural|mechanical|electrical|bridge|infrastructure)\s+(design\s+)?engineer|\barchitect(?:ural)?\b(?!.*(?:data|cloud|software|systems?))|проектировщик|архитектор|инженер.проектировщик|\bBIM\b/i.test(title) && !/software|cloud|data|solution|enterprise|security|IT architect/i.test(title)) return 'bim'
+  if (/информационн[а-яё]* моделирован|инженер[\s-]*(?:конструктор|пто|сметчик)|сметчик|градостроител|конструктор|геодезист|техническ[а-яё]* надзор|строительн[а-яё]* контрол|\b(?:geotechnical|transportation|environmental|water|project|design|drainage|highway|traffic|construction) engineer|\b(?:quantity surveyor|design manager|civil designer)\b/iu.test(text)) return 'bim'
+  if (/аналитик|информационн[а-яё]* безопасност|системн[а-яё]* администратор|сетевой инженер|бэкенд|фронтенд|бекенд|инженер.{0,12}данных|автоматизаци[а-яё]* тестирован|^инженер-программист/iu.test(title)) return 'it'
   if (bimPattern.test(text)) return 'bim'
   if (/дизайнер/i.test(title) || designPattern.test(text)) return 'design'
   if (/data (architect|engineering)|java engineer|разработчик|программист|тестировщик/i.test(title) || itPattern.test(text)) return 'it'
@@ -77,10 +79,6 @@ export function inferLocation(location: unknown, remote = false) {
   return { city: remote && (match || /only|home.?office/i.test(text)) ? null : city, country: match?.name ?? (remote ? text : null), countryCode: match?.code ?? null }
 }
 
-export function isRelevant(vacancy: Vacancy) {
-  return vacancy.domain !== 'other' || !!vacancy.matchedQuery
-}
-
 function relevanceScore(vacancy: Vacancy, query: string) {
   if (!query) return 0
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
@@ -97,7 +95,8 @@ export function filterAndSort(vacancies: Vacancy[], filters: SearchFilters) {
   const filtered = vacancies.filter((vacancy) => {
     const currentDomain = vacancy.domain
     if (vacancy.isDemo) return false
-    if (currentDomain === 'other' && !(query && vacancy.matchedQuery === query)) return false
+    if (filters.withSalary === '1' && !(vacancy.salary.min || vacancy.salary.max || /\d/.test(vacancy.salary.text || ''))) return false
+    if (filters.postedWithin === '7' && !(vacancy.publishedAt && Date.parse(vacancy.publishedAt) >= Date.now() - 7 * 86400_000)) return false
     if (filters.domain !== 'all' && currentDomain !== filters.domain) return false
     if (filters.workFormat !== 'all' && vacancy.workFormat !== filters.workFormat) return false
     if (filters.country && filters.country !== 'all') {
@@ -130,7 +129,13 @@ export function dedupeVacancies(vacancies: Vacancy[]) {
   const urls = new Set<string>()
   const ids = new Set<string>()
   return vacancies.filter((vacancy) => {
-    const canonical = vacancy.isTelegram ? vacancy.id : vacancy.url.toLowerCase().replace(/[?#].*$/, '').replace(/\/$/, '')
+    let parsed: URL
+    try { parsed = new URL(vacancy.url) } catch { return false }
+    if (!['https:', 'http:'].includes(parsed.protocol) || vacancy.url.replace(/\/$/,'') === vacancy.sourceUrl.replace(/\/$/,'')) return false
+    parsed.hash = ''
+    for (const key of [...parsed.searchParams.keys()]) if (/^(?:utm_.+|gh_src|trackingId)$/i.test(key)) parsed.searchParams.delete(key)
+    parsed.searchParams.sort()
+    const canonical = parsed.href.replace(/\/$/,'')
     if (urls.has(canonical) || ids.has(vacancy.id)) return false
     urls.add(canonical)
     ids.add(vacancy.id)

@@ -2,12 +2,14 @@ import * as cheerio from 'cheerio'
 import { emptySalary, type SearchFilters, type Vacancy } from '../../src/types'
 import { fetchJson, fetchText, plainText } from '../http'
 import { detectDomain, inferLocation, inferWorkFormat, normalizeSearch } from '../normalize'
+import { mapLimit } from '../mapLimit'
+import { readHabrPosting, salaryFromPosting } from './russianEmployers'
 import { appConfig } from '../config'
 
 export async function fetchHabr(filters: SearchFilters): Promise<Vacancy[]> {
   const jobs = new Map<string, Vacancy>()
   const query = normalizeSearch(filters.q)
-  for (let page=1; page<=4; page++) {
+  for (let page=1; page <= (query ? 4 : 60); page++) {
     const params = new URLSearchParams({page:String(page),per_page:'25'})
     if (query) params.set('q',query)
     const xml = await fetchText('https://career.habr.com/vacancies/rss?' + params, { Accept: 'application/rss+xml, application/xml' }, 8000)
@@ -25,7 +27,7 @@ export async function fetchHabr(filters: SearchFilters): Promise<Vacancy[]> {
       const title=raw.match(/«(.+?)»/)?.[1] || raw
       const description=plainText(get('description'))
       const format=inferWorkFormat(description)
-      const city=raw.match(/\(([^()]+)\)\s*$/)?.[1]
+      const city=raw.match(/\(([^()]+)\)\s*$/)?.[1] || description.match(/(?:^|[.!?]\s+)([\p{Lu}][\p{L}\s-]{1,60})\s+\(Россия\)/u)?.[1]
       const tags=Array.from(description.matchAll(/#([\p{L}\d+#.]+)/gu),m=>m[1])
       const location=inferLocation(city,format==='remote')
       if (/\(Россия\)/i.test(description)) { location.countryCode='RU';location.country='Россия' }
@@ -37,7 +39,30 @@ export async function fetchHabr(filters: SearchFilters): Promise<Vacancy[]> {
     }
     if(items.length<25||prior===jobs.size) break
   }
-  return [...jobs.values()]
+  const rows = await mapLimit([...jobs.values()], 3, enrichHabr)
+  return rows.filter((job): job is Vacancy => job !== null)
+}
+
+const harbDetails = new Map<string, {until:number; fields:Promise<Partial<Vacancy> | null>}>()
+async function enrichHabr(job: Vacancy): Promise<Vacancy | null> {
+  // RSS is the live index. Fetch the employer's structured data for pay and older listings.
+  const dated = Date.parse(job.publishedAt || '')
+  const salaryMention = /\d\s*(?:₽|руб\.?|₸|€|\$|USD|EUR|RUB)(?:\s|[.,]|$)/i.test(job.description)
+  if (!salaryMention && Number.isFinite(dated) && Date.now()-dated < 25*86400_000) return job
+  const known = harbDetails.get(job.id)
+  if (known && known.until > Date.now()) {
+    const fields = await known.fields
+    return fields ? {...job,...fields} : null
+  }
+  const fields = readHabrPosting(job.externalId).then(post=>({
+    description:plainText(post.description,32000) || job.description,
+    validThrough:post.validThrough,salary:salaryFromPosting(post),
+    employment:typeof post.employmentType === 'string' ? post.employmentType : undefined,
+  })).catch(error => [404,410].includes(error?.status) || !Number.isFinite(dated) || Date.now()-dated>30*86400_000 ? null : {})
+  for (const [key,value] of harbDetails) if(value.until<=Date.now()) harbDetails.delete(key)
+  harbDetails.set(job.id, {until:Date.now()+10*60_000,fields})
+  const result = await fields
+  return result ? {...job,...result} : null
 }
 
 interface SjJob {

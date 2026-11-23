@@ -1,0 +1,13 @@
+import { useMemo, useState } from 'react'
+import type { SearchFilters, Vacancy } from '../types'
+import { useVacancies } from '../hooks/useVacancies'
+import { ErrorState } from '../components/States'
+import { SalaryView } from './SalaryView'
+
+export function SalaryMarketPage({filters,closedIds,onOpen}:{filters:SearchFilters;closedIds:Set<string>;onOpen:(job:Vacancy)=>void}) {
+  const [revision,setRevision] = useState(0)
+  const { data, loading, error } = useVacancies(filters,revision)
+  const items = useMemo(()=>data?.items.filter(job=>!closedIds.has(job.id)) ?? [],[data,closedIds])
+  if (error && !data) return <ErrorState message={error} onRetry={()=>setRevision(n=>n+1)}/>
+  return <SalaryView items={items} loading={loading} checked={data?.fetchedAt} onOpen={onOpen}/>
+}

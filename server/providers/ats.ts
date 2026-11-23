@@ -1,4 +1,6 @@
 import type { Vacancy } from '../../src/types'
+import { PartialListings } from '../partialListings'
+import { numericSalary } from '../salary'
 import { emptySalary } from '../../src/types'
 import { fetchJson, plainText, safeUrl } from '../http'
 import { detectDomain, inferLocation, inferWorkFormat } from '../normalize'
@@ -53,7 +55,7 @@ interface AshbyJob {
   jobUrl: string
   applyUrl?: string
   isListed?: boolean
-  compensation?: { compensationTierSummary?: string; scrapeableCompensationSalarySummary?: string }
+  compensation?: { compensationTierSummary?: string; scrapeableCompensationSalarySummary?: string; summaryComponents?: {compensationType:string;interval:string;currencyCode:string;minValue?:number;maxValue?:number}[] }
 }
 
 async function fetchAshbyBoard(board: string): Promise<Vacancy[]> {
@@ -66,12 +68,15 @@ async function fetchAshbyBoard(board: string): Promise<Vacancy[]> {
     const location = inferLocation(job.location ?? job.address?.postalAddress?.addressCountry, workFormat === 'remote')
     const tags = [job.department, job.team, job.employmentType].filter((tag): tag is string => Boolean(tag))
     const id = job.jobUrl.split('/').filter(Boolean).pop() ?? String(index)
+    const base = job.compensation?.summaryComponents?.filter(c=>c.compensationType==='Salary')
+    const component = base?.length === 1 ? base[0] : undefined
+    const salary = numericSalary(component?.minValue,component?.maxValue,component?.currencyCode,component?.interval)
     const salaryText = job.compensation?.scrapeableCompensationSalarySummary ?? job.compensation?.compensationTierSummary ?? null
     return {
       id: `ashby:${board}:${id}`, externalId: `${board}:${id}`, source: 'ashby', sourceName: `Ashby · ${company}`, sourceUrl,
       title: job.title, company, companyLogo: null, description,
       city: location.city, country: location.country, countryCode: location.countryCode, workFormat,
-      domain: detectDomain(job.title, description, tags), salary: { ...emptySalary, text: salaryText, period: salaryText ? 'year' : 'not_specified' },
+      domain: detectDomain(job.title, description, tags), salary: salary.text ? salary : {...salary,text:salaryText},
       publishedAt: job.publishedAt ?? null, verifiedAt: now(), url: safeUrl(job.jobUrl, sourceUrl), applyUrl: safeUrl(job.applyUrl, safeUrl(job.jobUrl, sourceUrl)),
       tags, isDemo: false, isTelegram: false,
     }
@@ -118,7 +123,12 @@ async function fetchLeverBoard(board: string): Promise<Vacancy[]> {
 
 export const atsProviders = {
   greenhouse: async () => (await Promise.all(appConfig.greenhouseBoards.map(fetchGreenhouseBoard))).flat(),
-  ashby: async () => (await Promise.all(appConfig.ashbyBoards.map(fetchAshbyBoard))).flat(),
+  ashby: async () => {
+    const results = await Promise.allSettled(appConfig.ashbyBoards.map(fetchAshbyBoard))
+    const jobs = results.flatMap(result=>result.status==='fulfilled'?result.value:[])
+    if(results.some(result=>result.status==='rejected')) throw new PartialListings(jobs)
+    return jobs
+  },
   lever: async () => (await Promise.all(appConfig.leverBoards.map(fetchLeverBoard))).flat(),
 }
 

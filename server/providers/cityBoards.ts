@@ -1,4 +1,5 @@
-import { emptySalary, type Vacancy } from '../../src/types'
+import { numericSalary } from '../salary'
+import { type Vacancy } from '../../src/types'
 import { fetchJson, plainText } from '../http'
 import { detectDomain, normalizeSearch } from '../normalize'
 import type { ProviderDefinition } from '../../src/types'
@@ -23,11 +24,11 @@ interface Posting {
 }
 
 export const boards = [
-  { id: 'egis', board: 'EgisGroup', name: 'Egis', city: 'Dubai' },
-  { id: 'sixt', board: 'SIXT', name: 'SIXT', city: 'Munich' },
-  { id: 'endava', board: 'Endava', name: 'Endava', city: 'Belgrade' },
-  { id: 'aecom', board: 'AECOM2', name: 'AECOM', city: '' },
-  { id: 'ramboll', board: 'Ramboll3', name: 'Ramboll', city: '' },
+  { id: 'egis', board: 'EgisGroup', name: 'Egis' },
+  { id: 'sixt', board: 'SIXT', name: 'SIXT' },
+  { id: 'endava', board: 'Endava', name: 'Endava' },
+  { id: 'aecom', board: 'AECOM2', name: 'AECOM' },
+  { id: 'ramboll', board: 'Ramboll3', name: 'Ramboll' },
 ] as const
 const countries = new Intl.DisplayNames(['ru'], { type: 'region' })
 type Board = typeof boards[number]
@@ -52,7 +53,7 @@ function listing(board: Board, job: Posting, query: string): Vacancy {
     sourceUrl: home(board), title: job.name.trim(), company: job.company.name, companyLogo: null, description: '',
     city: job.location.city || null, country: code && /^[A-Z]{2}$/.test(code) ? countries.of(code) ?? null : null,
     countryCode: code || null, workFormat: job.location.hybrid ? 'hybrid' : job.location.remote ? 'remote' : 'unspecified',
-    domain: detectDomain(job.name, '', [query]), salary: { ...emptySalary }, publishedAt: job.releasedDate ?? null,
+    domain: detectDomain(job.name, '', [job.function?.label || '', job.department?.label || '']), salary: numericSalary(job.compensation?.min, job.compensation?.max, job.compensation?.currency, job.compensation?.interval), publishedAt: job.releasedDate ?? null,
     verifiedAt: new Date().toISOString(), url, applyUrl: url, tags: [], isDemo: false, isTelegram: false,
     ...postingFacts(job), detailPending: true, matchedQuery: query,
   }
@@ -62,16 +63,19 @@ export const cityProviders: ProviderDefinition[] = boards.map(board => ({
   id: board.id, name: board.name, homeUrl: home(board), kind: 'ats', cacheTtlMs: 10 * 60_000, queryAware: true,
   note: 'Публичные вакансии работодателя. Поиск по всем городам. Статус повторно проверяется при открытии карточки.',
   async fetch(filters) {
-    const query = normalizeSearch(filters.q) || (board.city ? '' : 'bim')
+    const query = normalizeSearch(filters.q)
     const params = new URLSearchParams({ destination: 'PUBLIC', limit: '100' })
     if (query) params.set('q', query)
-    else params.set('city', board.city)
     const jobs: Vacancy[] = []
+    const visited = new Set<string>()
     let offset = 0
     while (true) {
       params.set('offset', String(offset))
       const page = await fetchJson<{ content: Posting[]; totalFound: number }>(api(board) + '?' + params)
       if (!Array.isArray(page.content) || !Number.isFinite(page.totalFound)) throw Error('Неверный формат списка вакансий')
+      const start = page.content[0]?.id
+      if (start && visited.has(start)) throw Error('Источник повторил страницу вакансий')
+      if (start) visited.add(start)
       for (const job of page.content) {
         if (/^\d+$/.test(String(job.id)) && job.active !== false && (!job.visibility || job.visibility === 'PUBLIC'))
           jobs.push(listing(board, job, query))

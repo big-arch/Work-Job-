@@ -15,6 +15,7 @@ import { useMediaQuery } from './hooks/useMediaQuery'
 import { useSaved } from './hooks/useSaved'
 import { useVacancies } from './hooks/useVacancies'
 import { cities } from './lib/cities'
+const SalaryMarketPage = lazy(() => import('./views/SalaryMarketPage').then(m=>({default:m.SalaryMarketPage})))
 const CitiesView = lazy(() => import('./views/CitiesView').then(m => ({default:m.CitiesView})))
 const SourcesView = lazy(() => import('./views/SourcesView').then(m => ({default:m.SourcesView})))
 import type { SearchFilters, Vacancy } from './types'
@@ -23,7 +24,7 @@ const defaultFilters: SearchFilters = {
   q: '', domain: 'all', workFormat: 'all', country: 'all', source: 'all', sort: 'relevance',
 }
 
-const views: AppView[] = ['search','cities','stats','sources','saved']
+const views: AppView[] = ['search','cities','salaries','stats','sources','saved']
 const getView = () => views.find(id=>id===window.location.hash.slice(1)) ?? 'search'
 
 export default function App() {
@@ -31,7 +32,7 @@ export default function App() {
   const [filters, setFilters] = useState<SearchFilters>(() => {
     const p=new URLSearchParams(window.location.search)
     const domain=p.get('domain'), workFormat=p.get('workFormat')
-    return { ...defaultFilters, q:p.get('q')?.slice(0,160)??'', country:p.get('country')?.slice(0,40)||'all',
+    return { ...defaultFilters, withSalary:p.get('withSalary')==='1'?'1':'',postedWithin:p.get('postedWithin')==='7'?'7':'', q:p.get('q')?.slice(0,160)??'', country:p.get('country')?.slice(0,40)||'all',
       domain:['it','bim','design','other'].includes(domain??'')?domain as SearchFilters['domain']:'all',
       workFormat:['office','remote','hybrid','unspecified'].includes(workFormat??'')?workFormat as SearchFilters['workFormat']:'all',
       city:p.get('city')?.slice(0,40)||'', source:(p.get('source')?.slice(0,64)||'all') as SearchFilters['source'],
@@ -43,10 +44,12 @@ export default function App() {
     return value === 'telegram' || value === 'sites' ? value : 'all'
   })
   const [closedIds, setClosedIds] = useState<Set<string>>(() => new Set())
+  const [payVacancy,setPayVacancy] = useState<Vacancy|null>(null)
   const [toast, setToast] = useState('')
   const handleClosed = useCallback((id: string) => {
     setClosedIds(current => current.has(id) ? current : new Set([...current, id]))
-    setToast('Источник снял объявление с публикации')
+    setPayVacancy(null)
+    setToast('Объявление отсутствует в актуальной выдаче источника')
   }, [])
   const [draft, setDraft] = useState(filters.q)
   const [reloadToken, setReloadToken] = useState(0)
@@ -55,7 +58,7 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [visibleCount, setVisibleCount] = useState(12)
   useEffect(()=>{
-    const restore=()=>{setView(getView());setMobileDetailId(null);setSelectedId(null);window.scrollTo(0,0)}
+    const restore=()=>{setView(getView());setPayVacancy(null);setMobileDetailId(null);setSelectedId(null);window.scrollTo(0,0)}
     window.addEventListener('hashchange',restore)
     return ()=>window.removeEventListener('hashchange',restore)
   },[])
@@ -86,6 +89,7 @@ export default function App() {
 
   const navigate = (nextView: AppView) => {
     if(window.location.hash !== '#'+nextView) window.location.hash = nextView
+    setPayVacancy(null)
     setView(nextView)
     setSelectedId(null)
     setMobileDetailId(null)
@@ -96,6 +100,7 @@ export default function App() {
     setVisibleCount(12)
     setSelectedId(null)
     setMobileDetailId(null)
+    setDraft(next.q)
     if (filters.source !== next.source) setGroup('all')
     const url = new URL(window.location.href)
     for(const [key,value] of Object.entries(next)) {
@@ -164,8 +169,14 @@ export default function App() {
               <>
                 <SearchHero draft={draft} onDraftChange={setDraft} onSubmit={()=>searchNow({...filters,q:draft.trim()})} onQuickQuery={quickQuery} country={filters.country} countries={data?.facets.countries??[]} onCountry={country=>searchNow({...filters,country,city:''})}/>
                 <MarketStrip items={items} online={onlineSources} ready={!!data} onStats={()=>navigate('stats')} onSources={()=>navigate('sources')} onTelegram={()=>{setGroup('telegram');setVisibleCount(12);showCatalog()}}/>
-                {publishedMode && data && <p className="public-freshness">Открытые ленты обновлены {new Date(data.fetchedAt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}. Поиск по доскам работодателей выполняется при запросе.</p>}
+                {publishedMode && data && <p className="public-freshness">Открытые ленты обновлены {new Date(data.fetchedAt).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}. Поисковый запрос дополнительно проверяется на досках работодателей.</p>}
                 <div className="catalog-controls" aria-label="Направление вакансий">{([['all','Все направления'],['bim','BIM и проектирование'],['it','IT'],['design','Дизайн']] as const).map(([id,label])=><button key={id} aria-pressed={filters.domain===id} onClick={()=>updateFilters({...filters,domain:id})}>{label}</button>)}</div>
+                <div className="quick-filters" aria-label="Быстрые фильтры">
+                  <button aria-pressed={filters.country==='RU'} onClick={()=>updateFilters({...filters,country:filters.country==='RU'?'all':'RU',city:''})}>Россия</button>
+                  <button aria-pressed={filters.withSalary==='1'} onClick={()=>updateFilters({...filters,withSalary:filters.withSalary==='1'?'':'1'})}>С зарплатой</button>
+                  <button aria-pressed={filters.postedWithin==='7'} onClick={()=>updateFilters({...filters,postedWithin:filters.postedWithin==='7'?'':'7'})}>Опубликованы за неделю</button>
+                  <a href="#salaries" onClick={()=>navigate('salaries')}>Сравнить зарплаты ↗</a>
+                </div>
                 <div className="workspace-toolbar" id="catalog"><div><h2>Каталог вакансий</h2><p aria-live="polite">{data ? `В выборке · ${items.length}` : 'Загружаем вакансии…'}</p>{filters.country !== 'all' && <button type="button" className="location-chip" aria-label="Снять фильтр страны" onClick={() => updateFilters({ ...filters, country: 'all' })}>{data?.facets.countries.find(country => country.code === filters.country)?.name ?? filters.country} ×</button>}{filters.city && <button className="location-chip" type="button" onClick={() => updateFilters({ ...filters, city: '' })}>{cities.find(city => city.id === filters.city)?.name} ×</button>}</div><button className="filter-trigger" type="button" onClick={() => setFiltersOpen(true)} aria-expanded={filtersOpen}><SlidersHorizontal size={17} />Фильтры{(filters.workFormat !== 'all' || filters.country !== 'all' || filters.source !== 'all') && <i />}</button></div>
                 <div className="feed-switch" aria-label="Тип источника">{([['all', 'Все', available.length], ['sites', 'Сайты вакансий', available.length - telegramCount], ['telegram', 'Telegram', telegramCount]] as const).map(([id, label, count]) => <button key={id} type="button" aria-pressed={group === id} onClick={() => { setGroup(id); setVisibleCount(12); setSelectedId(null); setMobileDetailId(null) }}>{label} <span>{count}</span></button>)}</div>
                 <div className="workspace-grid">
@@ -192,6 +203,7 @@ export default function App() {
                 {saved.length === 0 ? <div className="empty-state"><SearchX size={38} /><h2>Здесь пока пусто</h2><p>Сохраняйте вакансии закладкой — они останутся в браузере после перезагрузки.</p><button className="primary-button" type="button" onClick={() => navigate('search')}>Найти вакансии</button></div> : <div className="saved-layout"><section><VacancyList items={saved} selectedId={activeVacancy?.id ?? null} savedIds={savedIds} visibleCount={visibleCount} onSelect={selectVacancy} onToggleSaved={(vacancy) => { toggleSave(vacancy); if (isMobile) setMobileDetailId(null) }} onShowMore={() => setVisibleCount((count) => count + 12)} /></section><aside className="detail-column">{activeVacancy && !isMobile && <Suspense fallback={<DetailPlaceholder/>}><VacancyDetail onClosed={handleClosed} key={activeVacancy.id} vacancy={activeVacancy} saved onToggleSaved={() => { removeSaved(activeVacancy.id); setToast('Удалено из сохранённого') }} onShare={() => void shareVacancy(activeVacancy)} /></Suspense>}</aside></div>}
               </section>
             )}
+            {view === 'salaries' && <Suspense fallback={<p role="status">Загружаем зарплаты…</p>}><SalaryMarketPage filters={defaultFilters} closedIds={closedIds} onOpen={setPayVacancy}/></Suspense>}
             {view === 'stats' && <StatsView items={items} filters={filters} loading={loading} onBack={()=>navigate('search')} onFilter={next=>{updateFilters(next);navigate('search');window.setTimeout(showCatalog,260)}}/>}
             {view === 'cities' && <Suspense fallback={<p role="status">Загружаем города…</p>}><CitiesView onCity={openCity} /></Suspense>}
             {view === 'sources' && <Suspense fallback={<p role="status">Загружаем источники…</p>}><SourcesView sources={data?.sources ?? []} loading={loading} onRefresh={() => setReloadToken((value) => value + 1)} /></Suspense>}
@@ -200,6 +212,7 @@ export default function App() {
       </main>
 
       <FiltersDrawer open={filtersOpen} onClose={() => setFiltersOpen(false)} filters={filters} sources={data?.sources ?? []} countries={data?.facets.countries ?? []} onChange={updateFilters} onReset={resetFilters} />
+      {view==='salaries' && payVacancy && <Suspense fallback={null}><VacancyDetailDialog vacancy={payVacancy} open saved={savedIds.has(payVacancy.id)} onClosed={handleClosed} onClose={()=>setPayVacancy(null)} onShare={()=>void shareVacancy(payVacancy)} onToggleSaved={()=>toggleSave(payVacancy)}/></Suspense>}
       {isMobile && mobileVacancy && <Suspense fallback={null}><VacancyDetailDialog onClosed={handleClosed} vacancy={mobileVacancy} open={isMobile && Boolean(mobileVacancy)} saved={mobileVacancy ? savedIds.has(mobileVacancy.id) : false} onClose={() => setMobileDetailId(null)} onToggleSaved={() => mobileVacancy && toggleSave(mobileVacancy)} onShare={() => mobileVacancy && void shareVacancy(mobileVacancy)} /></Suspense>}
       <div className={`toast ${toast ? 'visible' : ''}`} role="status" aria-live="polite" aria-atomic="true">{toast && <><CheckCircle2 size={18} />{toast}</>}</div>
       <button className={`mobile-filter-fab ${view === 'search' ? 'visible' : ''}`} type="button" onClick={() => setFiltersOpen(true)} aria-label="Открыть фильтры"><Filter size={19} /></button>

@@ -1,4 +1,6 @@
 import express from 'express'
+import { registryUrl } from '../src/lib/trudLink'
+import { trudDetail } from './providers/trudvsem'
 import { createHash } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { existsSync } from 'node:fs'
@@ -31,6 +33,7 @@ app.get('/api/sources', (_request, response) => {
 app.get('/api/vacancies', async (request: Request, response: Response) => {
   const query = request.query
   const filters: SearchFilters = {
+    withSalary:query.withSalary === '1' ? '1' : '',postedWithin:query.postedWithin === '7' ? '7' : '',
     q: typeof query.q === 'string' ? query.q.slice(0, 160) : '',
     city: typeof query.city === 'string' ? query.city.slice(0, 40) : '',
     domain: ['it', 'bim', 'design', 'other'].includes(String(query.domain)) ? query.domain as SearchFilters['domain'] : 'all',
@@ -52,16 +55,17 @@ app.get('/api/vacancies/:source/:id', async (request, response) => {
   const { source, id } = request.params
   const board = boards.find(item => item.id === source)
   const isTelegram = source === 'telegram' && /^[a-z0-9_]{4,32}:\d+$/.test(id)
-  if (!isTelegram && (!(board || source === 'hh' || source === 'superjob') || !/^\d{1,24}$/.test(id))) {
+  const isTrud = source === 'trudvsem' && !!registryUrl(id)
+  if (!isTelegram && !isTrud && (!(board || source === 'hh' || source === 'superjob') || !/^\d{1,24}$/.test(id))) {
     response.sendStatus(404)
     return
   }
   response.setHeader('Cache-Control', 'no-store')
   try {
-    response.json(await (board ? boardDetail(board, id) : isTelegram ? telegramDetail(id) : source === 'superjob' ? superjobDetail(id) : hhDetail(id)))
+    response.json(await (isTrud ? trudDetail(id) : board ? boardDetail(board, id) : isTelegram ? telegramDetail(id) : source === 'superjob' ? superjobDetail(id) : hhDetail(id)))
   } catch (e) {
     if ([404, 410].includes((e as { status?: number }).status ?? 0)) {
-      markClosed(source + ':' + id)
+      markClosed(source + ':' + (isTrud ? id.split(':')[1] : id))
       response.status(410).json({ error: 'Источник снял объявление с публикации.' })
     } else response.status(503).json({ error: 'Не удалось обновить карточку у источника.' })
   }

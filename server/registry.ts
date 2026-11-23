@@ -1,6 +1,7 @@
 import type { ProviderDefinition, SourceHealth } from '../src/types'
 import { fetchArbeitnow, fetchHh, fetchRemoteOk, fetchRemotive } from './providers/boards'
 import { appConfig } from './config'
+import { russianEmployers } from './providers/russianEmployers'
 import { cityProviders } from './providers/cityBoards'
 import { atsProviders } from './providers/ats'
 import { telegramProviders } from './providers/telegram'
@@ -12,12 +13,13 @@ export type { ProviderDefinition } from '../src/types'
 
 export const providers: ProviderDefinition[] = [
   ...cityProviders,
+  ...russianEmployers,
   ...(appConfig.leverBoards.length ? [{ id: 'lever', name: 'Lever', kind: 'ats' as const, homeUrl: 'https://jobs.lever.co/' + encodeURIComponent(appConfig.leverBoards[0]), note: 'Официальные объявления настроенных работодателей.', cacheTtlMs: 60 * 60_000, fetch: atsProviders.lever }] : []),
   { id: 'trudvsem', name: 'Работа России', homeUrl: 'https://trudvsem.ru', kind: 'job-board', queryAware: true, cacheTtlMs: 10 * 60_000, note: 'Открытые данные Роструда. Поиск по страницам в пределах лимита открытого API.', fetch: fetchTrudvsem },
   ...(appConfig.hhAccessToken ? [{
     id:'hh', name:'HeadHunter', kind:'job-board' as const, homeUrl:'https://hh.ru', note:'Официальный API приложения HH.', cacheTtlMs:15*60_000, fetch:fetchHh,
   }] : []),
-  { id:'habr', name:'Хабр Карьера', kind:'job-board', homeUrl:'https://career.habr.com/vacancies/rss', note:'Официальная RSS-лента. До 100 последних результатов на запрос. Карточка содержит краткое описание из ленты.', queryAware:true, cacheTtlMs:10*60_000, fetch:fetchHabr },
+  { id:'habr', name:'Хабр Карьера', kind:'job-board', homeUrl:'https://career.habr.com/vacancies/rss', note:'Официальная RSS-лента. Основная лента и тематический поиск. Зарплатные условия сверяются с карточкой площадки.', queryAware:true, cacheTtlMs:10*60_000, fetch:fetchHabr },
   ...(appConfig.superJobKey ? [{ id:'superjob', name:'SuperJob', kind:'job-board' as const, homeUrl:'https://www.superjob.ru/', note:'API зарегистрированного приложения. До 500 результатов на запрос.', queryAware:true, cacheTtlMs:5*60_000, fetch:fetchSuperjob }] : []),
   { id: 'remotive', name: 'Remotive', kind: 'job-board', homeUrl: 'https://remotive.com', note: 'Официальный API. Атрибуция и ссылка обязательны; данные задерживаются на 24 часа.', cacheTtlMs: 6 * 60 * 60_000, fetch: fetchRemotive },
   { id: 'remoteok', name: 'Remote OK', kind: 'job-board', homeUrl: 'https://remoteok.com', note: 'Публичный JSON feed удалённой работы с обратной ссылкой.', cacheTtlMs: 6 * 60 * 60_000, fetch: fetchRemoteOk },
@@ -25,7 +27,7 @@ export const providers: ProviderDefinition[] = [
   { id: 'jobicy', name: 'Jobicy', kind: 'job-board', homeUrl: 'https://jobicy.com', note: 'Публичный Jobicy API с обязательной атрибуцией источника.', cacheTtlMs: 60 * 60_000, fetch: fetchJobicy },
   { id: 'wwr', name: 'We Work Remotely', kind: 'job-board', homeUrl: 'https://weworkremotely.com', note: 'Официальная RSS-лента удалённой работы.', cacheTtlMs: 60 * 60_000, fetch: fetchWeWorkRemotely },
   { id: 'greenhouse', name: 'Greenhouse · Discord', kind: 'ats', homeUrl: 'https://discord.com/careers', note: 'Официальный Job Board API работодателя.', cacheTtlMs: 60 * 60_000, fetch: atsProviders.greenhouse },
-  { id: 'ashby', name: 'Ashby · Linear', kind: 'ats', homeUrl: 'https://linear.app/careers', note: 'Официальный Public Job Posting API работодателя.', cacheTtlMs: 60 * 60_000, fetch: atsProviders.ashby },
+  { id: 'ashby', name: 'Доски работодателей Ashby', kind: 'ats', homeUrl: 'https://linear.app/careers', note: 'Вакансии из публичных досок ' + appConfig.ashbyBoards.join(', ') + '. Вилки оплаты берём из поля базовой зарплаты.', cacheTtlMs: 60 * 60_000, fetch: atsProviders.ashby },
   ...telegramProviders.filter(provider => provider.kind !== 'restricted'),
 ]
 

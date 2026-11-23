@@ -1,10 +1,10 @@
 import type { SearchFilters, SourceHealth, Vacancy, VacancyResponse } from '../types'
-import { dedupeVacancies, filterAndSort, isRelevant } from '../../server/normalize'
+import { currentListing } from './freshness'
+import { dedupeVacancies, filterAndSort } from '../../server/normalize'
 
 export function catalogResponse(jobs:Vacancy[], filters:SearchFilters, sources:SourceHealth[], fetchedAt:string): VacancyResponse {
-  const deduped = dedupeVacancies(jobs).filter(job=>!job.isDemo)
-  const relevant = deduped.filter(isRelevant)
-  const domainFiltered = filterAndSort(relevant, { ...filters, workFormat: 'all', country: 'all' })
+  const deduped = dedupeVacancies(jobs.filter(job => currentListing(job)))
+  const domainFiltered = filterAndSort(deduped, { ...filters, workFormat: 'all', country: 'all' })
   const facets = {
     countries: Object.entries(domainFiltered.reduce<Record<string, { code: string; name: string; count: number }>>((acc, vacancy) => {
       if (!vacancy.country || !vacancy.countryCode) return acc
@@ -13,7 +13,7 @@ export function catalogResponse(jobs:Vacancy[], filters:SearchFilters, sources:S
       acc[code].count += 1
       return acc
     }, {})).map(([, value]) => value).sort((a, b) => b.count - a.count),
-    domains: (['it', 'bim', 'design'] as const).map((id) => ({ id, count: relevant.filter((vacancy) => vacancy.domain === id).length })),
+    domains: (['it', 'bim', 'design','other'] as const).map((id) => ({ id, count: deduped.filter((vacancy) => vacancy.domain === id).length })),
   }
   const items = filterAndSort(deduped, filters)
 

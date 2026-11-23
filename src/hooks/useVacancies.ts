@@ -4,7 +4,17 @@ import type { SearchFilters, VacancyResponse } from '../types'
 
 export function useVacancies(filters: SearchFilters, reloadToken: number) {
   const [state, setState] = useState<{ key: string; data: VacancyResponse | null; error: string | null; loading: boolean } | null>(null)
-  const key = JSON.stringify([filters, reloadToken])
+  const [refresh,setRefresh] = useState(0)
+  useEffect(()=>{
+    let last=Date.now()
+    const check=()=>{
+      if(document.visibilityState==='visible' && Date.now()-last>=5*60_000){last=Date.now();setRefresh(n=>n+1)}
+    }
+    const timer=window.setInterval(check,60_000)
+    document.addEventListener('visibilitychange',check)
+    return ()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',check)}
+  },[])
+  const key = JSON.stringify([filters, reloadToken, refresh])
 
   useEffect(() => {
     const controller = new AbortController()

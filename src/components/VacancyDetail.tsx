@@ -1,5 +1,6 @@
 import { ArrowUpRight, Bookmark, BriefcaseBusiness, Building2, CalendarDays, Check, ClipboardList, FileCheck2, Globe2, MapPin, Share2, Wallet, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { trudKey, registryUrl } from '../lib/trudLink'
 import { publishedMode } from '../lib/siteMode'
 import { jobProfile, type JobDetails } from '../lib/jobProfile'
 import type { Vacancy } from '../types'
@@ -13,16 +14,18 @@ export function VacancyDetail({ vacancy:summary,saved,onToggleSaved,onShare,onCl
   const [error,setError]=useState('')
   const [attempt,setAttempt]=useState(0)
   const [sectionIndex,setSectionIndex]=useState(0)
-  const needsDetail=summary.detailPending || summary.isTelegram
+  const registryKey = summary.source==='trudvsem' ? trudKey(summary.url) : null
+  const registerLink = registryKey ? registryUrl(registryKey) : null
+  const needsDetail=!!registryKey || publishedMode || summary.detailPending || summary.isTelegram
   useEffect(()=>{
     if(!needsDetail)return
     const abort=new AbortController()
     async function load() {
       if(publishedMode){
         const { publishedDetail }=await import('../lib/publishedCatalog')
-        return publishedDetail(summary.source,summary.externalId)
+        return publishedDetail(summary.source,summary.externalId,registryKey)
       }
-      const response=await fetch('/api/vacancies/'+summary.source+'/'+encodeURIComponent(summary.externalId),{signal:abort.signal,cache:'no-store'})
+      const response=await fetch('/api/vacancies/'+summary.source+'/'+encodeURIComponent(registryKey ?? summary.externalId),{signal:abort.signal,cache:'no-store'})
       if(!response.ok)throw Object.assign(Error('Ошибка источника'),{status:response.status})
       return await response.json() as JobDetails
     }
@@ -32,7 +35,7 @@ export function VacancyDetail({ vacancy:summary,saved,onToggleSaved,onShare,onCl
       else setError('Не удалось обновить объявление у источника.')
     })
     return ()=>abort.abort()
-  },[summary.id,summary.source,summary.externalId,needsDetail,attempt,onClosed])
+  },[summary.id,summary.source,summary.externalId,registryKey,needsDetail,attempt,onClosed])
   const v=summary
   const p=jobProfile(v,detail)
   const current=p.sections[sectionIndex]??p.sections[0]
@@ -60,12 +63,13 @@ export function VacancyDetail({ vacancy:summary,saved,onToggleSaved,onShare,onCl
     <section className="profile-facts"><h3>Условия вакансии</h3><dl>{facts.map(([Icon,label,value])=>value?<div key={label}><dt><Icon size={15}/>{label}</dt><dd>{conditionLabel(value)}</dd></div>:null)}</dl>
     {!loading && !p.salary && <p className="missing-pay">Размер оплаты в доступных данных не указан.</p>}</section>
     {p.skills.length>0 && <section className="profile-skills"><h3>Навыки из объявления</h3><div>{p.skills.map(s=><span key={s}>{s}</span>)}</div></section>}
-    {p.sections.length>0 && <section className="description-section"><h3>{v.source==='habr'?'Из ленты Хабр Карьеры':'Текст объявления'}</h3>
+    {p.sections.length>0 && <section className="description-section"><h3>{'Текст объявления'}</h3>
     {p.sections.length>1 && <div className="section-switch" aria-label="Разделы объявления">{p.sections.map((s,i)=><button key={i} onClick={()=>setSectionIndex(i)} aria-pressed={current===s}>{s.label}</button>)}</div>}
-    {current && <div className="description-text expanded"><p>{current.text}</p></div>}</section>}
+    {current && <div key={current.label+sectionIndex} className="description-text expanded"><p>{current.text}</p></div>}</section>}
     {!loading && !error && !current && <p>Полный текст доступен на странице работодателя.</p>}
     {p.docs.length>0 && <details className="relocation-details"><summary>Переезд и право на работу</summary>{p.docs.map((text,i)=><blockquote key={i}>{text}</blockquote>)}</details>}
     <footer className="detail-verification"><div><CalendarDays size={15}/>Опубликовано · {formatDate(v.publishedAt)}</div><div><FileCheck2 size={15}/>Сверено · {formatDate(detail?.verifiedAt??v.verifiedAt,true)}</div></footer>
+    {registerLink&&<a className="registry-link" href={registerLink} target="_blank" rel="noreferrer">Проверить запись в открытом реестре Роструда <ArrowUpRight size={14}/></a>}
     <div className="detail-actions"><a className="primary-button apply-button" href={detail?.url||v.url} target="_blank" rel="noreferrer">{v.isTelegram?'Открыть сообщение в Telegram':'Перейти к первоисточнику'} <ArrowUpRight size={17}/></a><button className="secondary-button" onClick={onToggleSaved}>{saved?<Check size={15}/>:<Bookmark size={15}/>} {saved?'Сохранено':'Сохранить'}</button></div>
   </article>
 }
