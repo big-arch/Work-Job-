@@ -26,6 +26,7 @@ export function SalaryView({items,loading,checked,onOpen}:{
   const [group,setGroup] = useState('')
   const [text,setText] = useState('')
   const [bin,setBin] = useState<number|null>(null)
+  const [offerQuery,setOfferQuery] = useState('')
   const [limit,setLimit] = useState(8)
   const [groupLimit,setGroupLimit] = useState(10)
   const [showUnspecified,setShowUnspecified] = useState(false)
@@ -39,7 +40,7 @@ export function SalaryView({items,loading,checked,onOpen}:{
   const cohort = cohorts.some(c=>c[0]===selection) ? selection : (cohorts.find(c=>c[0].startsWith('RUB|month|'))??cohorts[0])?.[0] ?? ''
   const [currency,unit] = cohort.split('|')
   const base = useMemo(()=>region.filter(j=>cohort && salaryKey(j.salary)===cohort),[region,cohort])
-  const unclassified = useMemo(()=>region.filter(j=>!salaryKey(j.salary) && !!j.salary.text),[region])
+  const unclassified = useMemo(()=>region.filter(j=>!salaryKey(j.salary) && /\d/.test(j.salary.text || '')),[region])
   const rows = useMemo(()=>base.flatMap(job=>{
     const amount=quotedValue(job.salary,measure)
     return amount===null?[]:[{job,amount}]
@@ -54,14 +55,16 @@ export function SalaryView({items,loading,checked,onOpen}:{
     if (slice!=='market' && activeGroup) return row.job[slice].trim().replace(/\s+/g,' ').toLocaleLowerCase('ru')===activeGroup.key
     return true
   })
-  const active = showUnspecified ? unclassified : available.map(row=>row.job)
-  function clearDetails() {setGroup('');setBin(null);setText('');setLimit(8);setGroupLimit(10);setShowUnspecified(false)}
+  const rawQuery=offerQuery.trim().toLocaleLowerCase('ru')
+  const active = showUnspecified ? unclassified.filter(j=>(j.company+' '+j.title).toLocaleLowerCase('ru').includes(rawQuery)) : available.map(row=>row.job)
+  function clearDetails() {setGroup('');setBin(null);setText('');setLimit(8);setGroupLimit(10);setShowUnspecified(false);setOfferQuery('')}
   const clearFilter=()=>{setGroup('');setBin(null);setShowUnspecified(false);setLimit(8)}
   const median=quantile(sorted,.5), p25=quantile(sorted,.25), p75=quantile(sorted,.75)
+  const gap = activeGroup && median && activeGroup.count >= 3 ? Math.round((activeGroup.median / median - 1) * 100) : null
   const rangeText=(b:typeof bars[number])=>b.max===null?'от '+money(b.min,currency):money(b.min,currency)+' – < '+money(b.max,currency)
   return <section className="pay-view">
     <header className="pay-heading"><div><h1>Зарплаты</h1><p>Сколько предлагают работодатели в открытых вакансиях Work &amp; Job.</p></div>
-      {checked&&<span className="pay-date"><i/>Ленты сверены <time dateTime={checked}>{new Date(checked).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time></span>}</header>
+      {loading && <small className="pay-loading" role="status">Обновляем выборку…</small>}{checked&&<span className="pay-date"><i/>Ленты сверены <time dateTime={checked}>{new Date(checked).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time></span>}</header>
     <div className="pay-controls">
       <label>Страна<select value={country} onChange={e=>{setCountry(e.target.value);clearDetails()}}><option value="">Все страны</option>{countries.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
       <label>Направление<select value={domain} onChange={e=>{setDomain(e.target.value);clearDetails()}}><option value="">Все направления</option><option value="bim">BIM и проектирование</option><option value="design">Дизайн</option><option value="it">IT и разработка</option><option value="other">Другое</option></select></label>
@@ -83,16 +86,18 @@ export function SalaryView({items,loading,checked,onOpen}:{
           <><label className="pay-group-search"><Search size={16}/><input value={text} onChange={e=>{setText(e.target.value);setGroup('');setGroupLimit(10);setLimit(8);setShowUnspecified(false)}} aria-label={slice==='company'?'Найти компанию':'Найти должность'} placeholder={slice==='company'?'Найти компанию':'Найти должность'}/></label>
             <div className="pay-table"><div className="pay-column-head"><span>{slice==='company'?'Компания':'Должность'}</span><span>Вакансий</span><span>Медиана</span></div>
             {matching.slice(0,groupLimit).map(g=><button key={g.key} aria-pressed={activeGroup?.key===g.key} onClick={()=>{setGroup(group===g.key?'':g.key);setShowUnspecified(false);setLimit(8)}}><span>{g.label}</span><span>{number.format(g.count)}</span><b>{money(g.median,currency)}<ChevronRight size={13}/></b></button>)}</div>
+            {activeGroup && <div className="pay-comparison" aria-live="polite"><span>{activeGroup.label}</span><strong>{money(activeGroup.median,currency)}</strong><small>{gap===null?'В группе меньше трёх вакансий':gap===0?'Совпадает с медианой рынка в выбранной группе':Math.abs(gap)+'% '+(gap>0?'выше':'ниже')+' медианы рынка в выбранной группе'}</small></div>}
             {!matching.length&&<p className="pay-empty">Совпадений нет.</p>}
             {matching.length>groupLimit&&<button className="pay-more" onClick={()=>setGroupLimit(n=>n+20)}>Показать ещё <ChevronDown size={15}/></button>}</>}
       </section>
       <section className="pay-panel pay-evidence"><div className="pay-panel-head"><h2>Вакансии в выборке</h2><span>{number.format(active.length)}</span></div>
         {(activeGroup || bin!==null || showUnspecified)&&<button className="pay-chip" onClick={clearFilter}>{showUnspecified?'Без условий для сравнения':activeGroup?.label || (bars[bin!] && rangeText(bars[bin!]))}<X size={14}/></button>}
+        {showUnspecified&&<label className="pay-group-search"><Search size={16}/><input aria-label="Найти по компании или должности" placeholder="Компания или должность" value={offerQuery} onChange={e=>{setOfferQuery(e.target.value);setLimit(8)}}/></label>}
         {active.slice(0,limit).map(job=><button type="button" className="pay-job" key={job.id} onClick={()=>onOpen(job)}><span><strong>{job.title}</strong><small>{job.company}</small></span><b>{job.salary.text || money(quotedValue(job.salary,measure),currency)} <ArrowUpRight size={14}/></b></button>)}
         {!active.length&&<p className="pay-empty">Пока нет вакансий для выбранных условий.</p>}
         {active.length>limit&&<button className="pay-more" onClick={()=>setLimit(n=>n+12)}>Ещё вакансии <ChevronDown size={15}/></button>}</section>
     </div>
     <details className="pay-method"><summary><CircleHelp size={17}/> Как рассчитаны показатели <ChevronDown size={16}/></summary><p>Повторы одной ссылки или ID учитываются один раз. Одну позицию могут опубликовать на разных площадках. Нижнюю и верхнюю границы считаем отдельно. Середина вилки требует обеих границ. Валюта, период и налоговый режим одинаковы внутри каждой группы. Поле «налоги не уточнены» означает, что условия до и после вычета могут различаться.</p><p>Медиана делит упорядоченные предложения пополам. По одной вакансии видна только сумма этого предложения. Здесь показаны опубликованные условия подключённых источников. Фактические выплаты могут отличаться.</p></details>
-    {unclassified.length>0&&<button className="pay-unclassified" aria-pressed={showUnspecified} onClick={()=>{setShowUnspecified(!showUnspecified);setGroup('');setBin(null);setLimit(8);document.querySelector('.pay-evidence')?.scrollIntoView({block:'start'})}}><Wallet size={17}/> Сумма указана без всех условий сравнения · {number.format(unclassified.length)} <ArrowDownRight size={16}/></button>}
+    {unclassified.length>0&&<button className="pay-unclassified" aria-pressed={showUnspecified} onClick={()=>{setShowUnspecified(!showUnspecified);setOfferQuery('');setGroup('');setBin(null);setLimit(8);document.querySelector('.pay-evidence')?.scrollIntoView({block:'start'})}}><Wallet size={17}/> Сумма указана без всех условий сравнения · {number.format(unclassified.length)} <ArrowDownRight size={16}/></button>}
   </section>
 }

@@ -31,7 +31,7 @@ function providerBatch(provider: ProviderDefinition, filters: SearchFilters, cac
   })
   const recentFailure = failures.get(key)
   if (recentFailure && Date.now() - recentFailure.at < 60_000) return Promise.resolve(recentFailure.result)
-  if (fresh) return Promise.resolve(batch(cached.jobs, 'online', cached.fetchedAt, null))
+  if (fresh) return Promise.resolve(batch(cached.jobs, cached.partial ? 'degraded' : 'online', cached.fetchedAt, cached.partial ? 'Часть страниц источника недоступна.' : null))
   if (cacheOnly) return Promise.resolve(batch([], 'disabled', null, null))
   const ongoing = pending.get(key)
   if (ongoing) return ongoing
@@ -45,6 +45,10 @@ function providerBatch(provider: ProviderDefinition, filters: SearchFilters, cac
   }).catch(error => {
     const partial = error instanceof PartialListings && error.jobs.length > 0
     const result = batch(partial ? error.jobs : [], partial ? 'degraded' : 'unavailable', partial ? new Date().toISOString() : null, errorMessage(error))
+    if (partial) {
+      cache.set(key,{jobs:result.jobs,fetchedAt:result.health.fetchedAt!,partial:true})
+      saveCache(cache)
+    }
     failures.set(key, { result, at: Date.now() })
     return result
   }).finally(() => pending.delete(key))

@@ -8,6 +8,6 @@ export function SalaryMarketPage({filters,closedIds,onOpen}:{filters:SearchFilte
   const [revision,setRevision] = useState(0)
   const { data, loading, error } = useVacancies(filters,revision)
   const items = useMemo(()=>data?.items.filter(job=>!closedIds.has(job.id)) ?? [],[data,closedIds])
-  if (error && !data) return <ErrorState message={error} onRetry={()=>setRevision(n=>n+1)}/>
+  if (error && !data) return <ErrorState message={error} onRetry={()=>setRevision(Date.now())}/>
   return <SalaryView items={items} loading={loading} checked={data?.fetchedAt} onOpen={onOpen}/>
 }

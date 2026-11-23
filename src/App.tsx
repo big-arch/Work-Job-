@@ -162,7 +162,7 @@ export default function App() {
       <a className="skip-link" href="#main-content">Перейти к вакансиям</a>
       <Header view={view} savedCount={saved.length} onlineSources={onlineSources} loadingSources={loading} onNavigate={navigate} />
       <main id="main-content" tabIndex={-1}>
-        {error && data && <div className="stale-warning" role="alert"><AlertCircle size={17} /><p>Не удалось обновить данные. Показываем предыдущую выборку и статусы.</p><button type="button" onClick={() => setReloadToken((value) => value + 1)}><RefreshCw size={15} />Повторить</button></div>}
+        {error && data && <div className="stale-warning" role="alert"><AlertCircle size={17} /><p>Не удалось обновить данные. Показываем предыдущую выборку и статусы.</p><button type="button" onClick={() => setReloadToken(Date.now())}><RefreshCw size={15} />Повторить</button></div>}
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}>
             {view === 'search' && (
@@ -183,7 +183,7 @@ export default function App() {
                   <aside className="filters-sidebar"><FiltersPanel filters={filters} sources={data?.sources ?? []} countries={data?.facets.countries ?? []} onChange={updateFilters} onReset={resetFilters} /></aside>
                   <section className="results-column" aria-label="Результаты поиска">
                     {loading && !items.length && <VacancySkeleton />}
-                    {error && !data && <ErrorState message={error} onRetry={() => setReloadToken((value) => value + 1)} />}
+                    {error && !data && <ErrorState message={error} onRetry={() => setReloadToken(Date.now())} />}
                     {!loading && !error && items.length === 0 && <EmptyState onReset={resetFilters} />}
                     {items.length > 0 && <>
                       {loading && <div className="updating-note"><span />Уточняем данные у источников</div>}
@@ -206,7 +206,7 @@ export default function App() {
             {view === 'salaries' && <Suspense fallback={<p role="status">Загружаем зарплаты…</p>}><SalaryMarketPage filters={defaultFilters} closedIds={closedIds} onOpen={setPayVacancy}/></Suspense>}
             {view === 'stats' && <StatsView items={items} filters={filters} loading={loading} onBack={()=>navigate('search')} onFilter={next=>{updateFilters(next);navigate('search');window.setTimeout(showCatalog,260)}}/>}
             {view === 'cities' && <Suspense fallback={<p role="status">Загружаем города…</p>}><CitiesView onCity={openCity} /></Suspense>}
-            {view === 'sources' && <Suspense fallback={<p role="status">Загружаем источники…</p>}><SourcesView sources={data?.sources ?? []} loading={loading} onRefresh={() => setReloadToken((value) => value + 1)} /></Suspense>}
+            {view === 'sources' && <Suspense fallback={<p role="status">Загружаем источники…</p>}><SourcesView sources={data?.sources ?? []} loading={loading} onRefresh={() => setReloadToken(Date.now())} /></Suspense>}
           </motion.div>
         </AnimatePresence>
       </main>

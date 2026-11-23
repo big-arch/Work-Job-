@@ -9,6 +9,7 @@ import type { PublicCatalog } from './publicCatalogTypes'
 
 let catalog: Promise<PublicCatalog> | undefined
 let loadedAt = 0
+let forcedAt = 0
 const liveBoards = new Map<string, { expires: number; jobs: Promise<Vacancy[]> }>()
 const rejectedJobs = new Set<string>()
 
@@ -31,7 +32,8 @@ async function fetchCatalog() {
   return await response.json() as PublicCatalog
 }
 
-function readCatalog() {
+function readCatalog(revision = 0) {
+  if (revision > forcedAt) { forcedAt = revision; catalog = undefined }
   if (!catalog || Date.now() - loadedAt > 5 * 60_000) {
     loadedAt = Date.now()
     catalog = fetchCatalog().then(data => {
@@ -58,7 +60,7 @@ function liveListings(provider: LiveSource, filters: SearchFilters, revision: nu
 }
 
 export async function publishedSearch(filters: SearchFilters, phase: 'cache' | 'live', revision: number): Promise<VacancyResponse> {
-  const snapshot = await readCatalog()
+  const snapshot = await readCatalog(revision)
   const fresh = recentCheck(snapshot.fetchedAt)
   const upstreamMatches = new Set(snapshot.matches[normalizeSearch(filters.q)] ?? [])
   const sourceRows = new Map(snapshot.sources.map(s => [s.id, !fresh && (s.status === 'online' || s.status === 'degraded')
@@ -114,6 +116,7 @@ export async function publishedDetail(source: string, externalId: string, regist
   if (!recentCheck(snapshot.fetchedAt)) throw Error('Срок проверки ленты истёк.')
   const providerId = source === 'telegram' ? 'telegram:' + externalId.split(':')[0] : source
   if (!job && snapshot.sources.find(row=>row.id===providerId)?.status !== 'online') throw Error('Источник временно недоступен.')
-  if (!job || !currentListing(job)) throw Object.assign(Error('Публикации больше нет в актуальной выборке'),{status:410})
+  if (!job) throw Object.assign(Error('Публикация отсутствует в текущей ленте'),{status:409})
+  if (!currentListing(job)) throw Object.assign(Error('Срок показа объявления истёк'),{status:410})
   return {description:job.description, url:job.url, verifiedAt:job.verifiedAt}
 }

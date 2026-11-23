@@ -32,6 +32,7 @@ export function VacancyDetail({ vacancy:summary,saved,onToggleSaved,onShare,onCl
     load().then(value=>{if(!abort.signal.aborted)setDetail(value)}).catch(reason=>{
       if(abort.signal.aborted)return
       if(reason?.status===410){onClosed(summary.id);setError('Объявление снято с публикации.')}
+      else if(reason?.status===409) setError('В текущей ленте этой записи нет. Актуальность можно уточнить у первоисточника.')
       else setError('Не удалось обновить объявление у источника.')
     })
     return ()=>abort.abort()

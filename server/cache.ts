@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path'
 import type { Vacancy } from '../src/types'
 
 interface CacheEntry {
+  partial?: boolean
   jobs: Vacancy[]
   fetchedAt: string
 }

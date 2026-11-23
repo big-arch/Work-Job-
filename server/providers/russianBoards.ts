@@ -43,13 +43,13 @@ export async function fetchHabr(filters: SearchFilters): Promise<Vacancy[]> {
   return rows.filter((job): job is Vacancy => job !== null)
 }
 
-const harbDetails = new Map<string, {until:number; fields:Promise<Partial<Vacancy> | null>}>()
+const habrDetails = new Map<string, {until:number; fields:Promise<Partial<Vacancy> | null>}>()
 async function enrichHabr(job: Vacancy): Promise<Vacancy | null> {
   // RSS is the live index. Fetch the employer's structured data for pay and older listings.
   const dated = Date.parse(job.publishedAt || '')
   const salaryMention = /\d\s*(?:₽|руб\.?|₸|€|\$|USD|EUR|RUB)(?:\s|[.,]|$)/i.test(job.description)
   if (!salaryMention && Number.isFinite(dated) && Date.now()-dated < 25*86400_000) return job
-  const known = harbDetails.get(job.id)
+  const known = habrDetails.get(job.id)
   if (known && known.until > Date.now()) {
     const fields = await known.fields
     return fields ? {...job,...fields} : null
@@ -59,8 +59,8 @@ async function enrichHabr(job: Vacancy): Promise<Vacancy | null> {
     validThrough:post.validThrough,salary:salaryFromPosting(post),
     employment:typeof post.employmentType === 'string' ? post.employmentType : undefined,
   })).catch(error => [404,410].includes(error?.status) || !Number.isFinite(dated) || Date.now()-dated>30*86400_000 ? null : {})
-  for (const [key,value] of harbDetails) if(value.until<=Date.now()) harbDetails.delete(key)
-  harbDetails.set(job.id, {until:Date.now()+10*60_000,fields})
+  for (const [key,value] of habrDetails) if(value.until<=Date.now()) habrDetails.delete(key)
+  habrDetails.set(job.id, {until:Date.now()+10*60_000,fields})
   const result = await fields
   return result ? {...job,...result} : null
 }
