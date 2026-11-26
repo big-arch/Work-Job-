@@ -1,4 +1,6 @@
 import type { SearchFilters, SourceHealth, VacancyResponse } from '../src/types'
+import { boards } from './providers/cityBoards'
+import { creativeQuery } from '../src/lib/creativeRoles'
 import { recentCheck, currentListing } from '../src/lib/freshness'
 import { CACHE_PREFIX, loadCache, saveCache } from './cache'
 import { catalogResponse } from '../src/lib/catalogResponse'
@@ -24,7 +26,8 @@ export function markClosed(id: string) {
 
 function providerBatch(provider: ProviderDefinition, filters: SearchFilters, cacheOnly: boolean): Promise<Batch> {
   const remoteQuery = provider.queryAware || provider.id === 'hh' || provider.id === 'remotive'
-  const key = CACHE_PREFIX + provider.id + ':' + (remoteQuery ? normalizeSearch(filters.q) : '')
+  const fullBoard = creativeQuery(filters.q).length > 0 && boards.some(board=>board.id===provider.id)
+  const key = CACHE_PREFIX + provider.id + ':' + (remoteQuery && !fullBoard ? normalizeSearch(filters.q) : '')
   const cached = cache.get(key)
   const fresh = cached && Date.now() - Date.parse(cached.fetchedAt) < provider.cacheTtlMs
   const batch = (jobs: Vacancy[], status: SourceHealth['status'], fetchedAt: string | null, error: string | null): Batch => ({

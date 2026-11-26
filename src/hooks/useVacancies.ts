@@ -70,8 +70,10 @@ export function useVacancies(filters: SearchFilters, reloadToken: number) {
     }
     void cached()
     load('live').then(data => {
+      finished = true
       if (!controller.signal.aborted) display(data, false)
     }).catch(reason => {
+      finished = true
       if (!controller.signal.aborted) setState(previous => ({ key, data: previous?.key === key ? previous.data : null,
         loading: false, error: reason instanceof Error ? reason.message : 'Не удалось загрузить вакансии' }))
     }).finally(() => { finished = true; window.clearTimeout(timer) })

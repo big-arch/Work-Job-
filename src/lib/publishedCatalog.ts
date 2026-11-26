@@ -1,7 +1,8 @@
 import type { SearchFilters, SourceHealth, Vacancy, VacancyResponse } from '../types'
 import { recentCheck, currentListing } from './freshness'
 import { studios, studioDetail, studioProviders } from '../../server/providers/greenhouse'
-import { boards, cityProviders, boardDetail } from '../../server/providers/cityBoards'
+import { creativeQuery } from './creativeRoles'
+import { boards, isArtBoard, cityProviders, boardDetail } from '../../server/providers/cityBoards'
 import { fetchTrudvsem, trudDetail } from '../../server/providers/trudvsem'
 import { PartialListings } from '../../server/partialListings'
 import { normalizeSearch } from '../../server/normalize'
@@ -69,7 +70,9 @@ export async function publishedSearch(filters: SearchFilters, phase: 'cache' | '
   let items = fresh ? snapshot.items.filter(job => inSource(job, filters.source) && !rejectedJobs.has(job.id)).map(job =>
     upstreamMatches.has(job.id) && filters.q ? {...job, matchedQuery:normalizeSearch(filters.q)} : job) : []
   if (phase === 'live' && (filters.q.trim() || !fresh || revision > 0 && filters.source !== 'all')) {
-    const direct: LiveSource[] = [...cityProviders, ...(!fresh || filters.source !== 'all' ? studioProviders : [])]
+    const smart = fresh && filters.source === 'all' && creativeQuery(filters.q).length
+      ? cityProviders.filter(provider=>isArtBoard(provider.id)) : cityProviders
+    const direct: LiveSource[] = [...smart, ...(!fresh || filters.source !== 'all' ? studioProviders : [])]
     if (filters.q.trim()) direct.push({id:'trudvsem',fetch:fetchTrudvsem})
     const active = direct.filter(p => filters.source === 'all' || filters.source === p.id)
     const results = await Promise.all(active.map(async provider => {

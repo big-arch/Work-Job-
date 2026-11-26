@@ -20,7 +20,7 @@ import { cities } from './lib/cities'
 const SalaryMarketPage = lazy(() => import('./views/SalaryMarketPage').then(m=>({default:m.SalaryMarketPage})))
 const CitiesView = lazy(() => import('./views/CitiesView').then(m => ({default:m.CitiesView})))
 const SourcesView = lazy(() => import('./views/SourcesView').then(m => ({default:m.SourcesView})))
-import { domains, type SearchFilters, type Vacancy } from './types'
+import { domains, sourceIds, type SearchFilters, type Vacancy } from './types'
 
 const defaultFilters: SearchFilters = {
   q: '', domain: 'all', workFormat: 'all', country: 'all', source: 'all', sort: 'relevance',
@@ -32,10 +32,11 @@ const getView = () => views.find(id=>id===window.location.hash.slice(1)) ?? 'sea
 function readFilters(): SearchFilters {
   const p=new URLSearchParams(window.location.search)
   const domain=p.get('domain'), workFormat=p.get('workFormat')
+  const source = p.get('source') || ''
   return { ...defaultFilters, skill:p.get('skill')?.slice(0,45)||'', withSalary:p.get('withSalary')==='1'?'1':'',postedWithin:p.get('postedWithin')==='7'?'7':'', q:p.get('q')?.slice(0,160)??'', country:p.get('country')?.slice(0,40)||'all',
     domain:domains.some(id=>id===domain)?domain as SearchFilters['domain']:'all',
     workFormat:['office','remote','hybrid','unspecified'].includes(workFormat??'')?workFormat as SearchFilters['workFormat']:'all',
-    city:p.get('city')?.slice(0,40)||'', source:(p.get('source')?.slice(0,64)||'all') as SearchFilters['source'],
+    city:p.get('city')?.slice(0,40)||'', source:sourceIds.some(id=>id===source)||/^telegram:[a-z0-9_]{4,32}$/.test(source) ? source as SearchFilters['source'] : 'all',
     sort:p.get('sort')==='recent'?'recent':'relevance',
   }
 }
@@ -181,7 +182,7 @@ export default function App() {
       <a className="skip-link" href="#main-content">Перейти к вакансиям</a>
       <Header view={view} savedCount={saved.length} onlineSources={onlineSources} loadingSources={loading} onNavigate={navigate} />
       <main id="main-content" tabIndex={-1}>
-        {error && data && <div className="stale-warning" role="alert"><AlertCircle size={17} /><p>Не удалось обновить данные. Показываем предыдущую выборку и статусы.</p><button type="button" onClick={() => setReloadToken(Date.now())}><RefreshCw size={15} />Повторить</button></div>}
+        {error && data && items.length>0 && <div className="stale-warning" role="alert"><AlertCircle size={17} /><p>Не удалось обновить данные. Показываем предыдущую выборку и статусы.</p><button type="button" onClick={() => setReloadToken(Date.now())}><RefreshCw size={15} />Повторить</button></div>}
           <div key={view}>
             {view === 'search' && (
               <>
@@ -201,7 +202,7 @@ export default function App() {
                   <aside className="filters-sidebar"><FiltersPanel filters={filters} sources={data?.sources ?? []} countries={data?.facets.countries ?? []} onChange={updateFilters} onReset={resetFilters} /></aside>
                   <section className="results-column" aria-label="Результаты поиска">
                     {loading && !items.length && <VacancySkeleton />}
-                    {error && !data && <ErrorState message={error} onRetry={() => setReloadToken(Date.now())} />}
+                    {error && (!data || !items.length) && <ErrorState message={error} onRetry={() => setReloadToken(Date.now())} />}
                     {!loading && !error && items.length === 0 && (coverage.status==='ready' || coverage.status==='partial'
                       ? <EmptyState partial={coverage.status==='partial'} onReset={resetFilters}/>
                       : <ErrorState message={coverage.status==='stale' ? 'Срок проверки ленты истёк. Последняя сверка · '+formatDate(coverage.lastCheck,true) : 'Источник не подтвердил выдачу. Попробуйте повторить проверку.'} onRetry={()=>setReloadToken(Date.now())}/>)}

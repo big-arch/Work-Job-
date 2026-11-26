@@ -19,7 +19,8 @@ export function sourceCoverage(sources: SourceHealth[], source: SearchFilters['s
 export function projectCatalog(jobs: Vacancy[], filters: SearchFilters, sources: SourceHealth[], now = Date.now()): VacancyResponse {
   const current = jobs.filter(job => currentListing(job, now))
   const matching = filterAndSort(current, { ...filters, domain: 'all', workFormat: 'all', country: 'all' })
-  const inDomain = filters.domain === 'all' ? matching : matching.filter(job => filters.domain !== 'all' && matchesDomain(job, filters.domain))
+  const {domain, skill} = filters
+  const inDomain = domain === 'all' ? matching : matching.filter(job => matchesDomain(job, domain))
   const countries = new Map<string, { code: string; name: string; count: number }>()
   for (const job of inDomain) {
     if (!job.countryCode || !job.country) continue
@@ -30,7 +31,7 @@ export function projectCatalog(jobs: Vacancy[], filters: SearchFilters, sources:
   const local = (job: Vacancy) => (filters.workFormat === 'all' || filters.workFormat === job.workFormat)
     && (!filters.country || filters.country === 'all' || (job.countryCode ?? job.country) === filters.country)
   const candidates = inDomain.filter(local)
-  const items = filters.skill ? candidates.filter(job => listedSkills(job).includes(filters.skill!)) : candidates
+  const items = skill ? candidates.filter(job => listedSkills(job).includes(skill)) : candidates
   const skills: { name: string; count: number }[] = []
   if (filters.skill || filters.domain === '3d' || filters.domain === 'animation' || creativeQuery(filters.q).length) {
     const totals = new Map<string, number>()

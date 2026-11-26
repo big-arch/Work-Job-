@@ -25,11 +25,15 @@ interface Posting {
   visibility?: string
 }
 
-export const boards = [
+export const artBoards = [
   { id: 'ubisoft', board: 'Ubisoft2', name: 'Ubisoft' },
   { id: 'gameloft', board: 'Gameloft', name: 'Gameloft' },
   { id: 'cdprojekt', board: 'CDPROJEKTRED', name: 'CD PROJEKT RED' },
   { id: 'peoplecanfly', board: 'PeopleCanFly', name: 'People Can Fly' },
+] as const
+export const isArtBoard = (id: string) => artBoards.some(board => board.id === id)
+export const boards = [
+  ...artBoards,
   { id: 'egis', board: 'EgisGroup', name: 'Egis' },
   { id: 'sixt', board: 'SIXT', name: 'SIXT' },
   { id: 'endava', board: 'Endava', name: 'Endava' },
@@ -90,7 +94,7 @@ export const cityProviders: ProviderDefinition[] = boards.map(board => ({
       if (offset >= page.totalFound) break
       if (!page.content.length) throw Error('Источник вернул неполную страницу')
     }
-    if ('document' in globalThis || !['ubisoft','gameloft','cdprojekt','peoplecanfly'].includes(board.id)) return jobs
+    if ('document' in globalThis || !isArtBoard(board.id)) return jobs
     // Enrich art roles before publishing so the tool filters work without opening each card.
     const enriched = await mapLimit(jobs, 3, async job => {
       if (job.domain !== '3d' && job.domain !== 'animation') return job

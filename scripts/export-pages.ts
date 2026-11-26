@@ -6,7 +6,7 @@ import type { SearchFilters, SourceHealth, Vacancy } from '../src/types'
 import { providers, restrictedSources } from '../server/registry'
 import { appConfig } from '../server/config'
 import { studios } from '../server/providers/greenhouse'
-import { boards } from '../server/providers/cityBoards'
+import { boards, isArtBoard } from '../server/providers/cityBoards'
 import { normalizeSearch } from '../server/normalize'
 import type { PublicCatalog } from '../src/lib/publicCatalogTypes'
 
@@ -23,7 +23,7 @@ async function collect() {
   for (let provider = next.shift(); provider; provider = next.shift()) {
     const ids = new Set<string>()
     const smart = boards.some(b => b.id===provider.id)
-    const queries = smart && !['ubisoft','gameloft','cdprojekt','peoplecanfly'].includes(provider.id) ? ['', 'BIM'] : provider.id==='habr' ? ['', 'BIM', 'Revit', 'Python', 'Product Designer', '3D', 'аниматор'] : ['']
+    const queries = smart && !isArtBoard(provider.id) ? ['', 'BIM'] : provider.id==='habr' ? ['', 'BIM', 'Revit', 'Python', 'Product Designer', '3D', 'аниматор'] : ['']
     let successes=0, partial=false
     for (const q of queries) {
       try {
