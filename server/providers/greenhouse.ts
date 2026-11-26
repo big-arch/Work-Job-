@@ -26,10 +26,18 @@ interface Posting {
 
 const endpoint = (board: string) => 'https://boards-api.greenhouse.io/v1/boards/' + encodeURIComponent(board) + '/jobs'
 
+const htmlEntities: Record<string,string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" }
+export function greenhouseText(content = '') {
+  // Greenhouse can wrap the entire HTML document in a second layer of HTML encoding.
+  const markup = /&lt;\/?(?:p|div|span|strong|br|ul|li|h[1-6]|b|a)(?:\s|&gt;|\/)/i.test(content)
+    ? content.replace(/&(amp|lt|gt|quot|#39);/g, (_, name: string) => htmlEntities[name]) : content
+  return plainText(markup, 22000)
+}
+
 function listing(job: Posting, board: string, name: string, home: string, source: SourceId): Vacancy | null {
   const url = safeUrl(job.absolute_url, '')
   if (!job.id || !url || !job.title?.trim() || job.internal_job_id === null || !withinDeadline(job.application_deadline ?? undefined)) return null
-  const description = plainText(job.content?.replace(/&lt;/gi,'<').replace(/&gt;/gi,'>'), 22000)
+  const description = greenhouseText(job.content)
   const locationText = job.location?.name || job.offices?.map(office => office.name).filter(Boolean).join(', ')
   const workFormat = inferWorkFormat(locationText)
   const location = inferLocation(locationText, workFormat === 'remote')

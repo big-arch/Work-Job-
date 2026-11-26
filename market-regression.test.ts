@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { detectDomain, filterAndSort } from './server/normalize'
+import { greenhouseText } from './server/providers/greenhouse'
 import { telegramVacancy } from './server/providers/telegram'
 import { creativeQuery, matchesDomain } from './src/lib/creativeRoles'
 import { jobProfile } from './src/lib/jobProfile'
@@ -116,4 +117,10 @@ test('CG Telegram channels distinguish hiring, channel promotions, résumés and
   assert.equal(parse('Нужен 2D-аниматор на постоянную работу\n💰 5 000 ₽ за ролик\nЗадачи в Toon Boom')?.salary.text,'5 000 ₽ за ролик')
   assert.equal(vacancy.url,'https://t.me/cgfreelance/454')
   for (const prefix of ['#резюме\nИщу работу','Приглашаем в закрытый канал','Вакансия закрыта']) assert.equal(parse(prefix+'\n'+text),null)
+})
+
+test('readable studio descriptions preserve paragraph breaks and decode escaped HTML once per layer', () => {
+  const encoded='&lt;p&gt;Art &amp;amp; Animation&lt;/p&gt;&lt;p&gt;&amp;nbsp;&lt;/p&gt;&lt;p&gt;Use Blender &amp;amp; Maya&lt;/p&gt;'
+  assert.equal(greenhouseText(encoded),'Art & Animation\nUse Blender & Maya')
+  assert.equal(greenhouseText('<p>3D&nbsp;artist</p>'),'3D artist')
 })
