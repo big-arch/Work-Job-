@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { publishedSearch } from '../lib/publishedCatalog'
 import { publishedMode } from '../lib/siteMode'
 import { projectCatalog } from '../lib/catalogResponse'
 import { feedLifetime } from '../lib/freshness'
@@ -48,7 +49,6 @@ export function useVacancies(filters: SearchFilters, reloadToken: number) {
     let timer: number | undefined
     async function load(phase: 'cache' | 'live') {
       if (publishedMode) {
-        const { publishedSearch } = await import('../lib/publishedCatalog')
         return publishedSearch(upstream, phase, reloadToken)
       }
       const response = await fetch('/api/vacancies?' + params + '&phase=' + phase, { signal: controller.signal, cache: 'no-store' })

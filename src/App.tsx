@@ -1,5 +1,5 @@
 import { AlertCircle, Bookmark, CheckCircle2, Filter, RefreshCw, SearchX, SlidersHorizontal } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FiltersDrawer, FiltersPanel } from './components/FiltersPanel'
 import { MarketStrip, StatsView } from './views/StatsView'
 import { Directions } from './components/Directions'
@@ -10,16 +10,15 @@ import { Header } from './components/Header'
 import type { AppView } from './components/Header'
 import { SearchHero } from './components/SearchHero'
 import { DetailPlaceholder, EmptyState, ErrorState, VacancySkeleton } from './components/States'
-const VacancyDetail = lazy(() => import('./components/VacancyDetail').then(m => ({default:m.VacancyDetail})))
-const VacancyDetailDialog = lazy(() => import('./components/VacancyDetail').then(m => ({default:m.VacancyDetailDialog})))
+import { VacancyDetail, VacancyDetailDialog } from './components/VacancyDetail'
 import { VacancyList } from './components/VacancyList'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useSaved } from './hooks/useSaved'
 import { useVacancies } from './hooks/useVacancies'
 import { cities } from './lib/cities'
-const SalaryMarketPage = lazy(() => import('./views/SalaryMarketPage').then(m=>({default:m.SalaryMarketPage})))
-const CitiesView = lazy(() => import('./views/CitiesView').then(m => ({default:m.CitiesView})))
-const SourcesView = lazy(() => import('./views/SourcesView').then(m => ({default:m.SourcesView})))
+import { SalaryMarketPage } from './views/SalaryMarketPage'
+import { CitiesView } from './views/CitiesView'
+import { SourcesView } from './views/SourcesView'
 import { domains, sourceIds, type SearchFilters, type Vacancy } from './types'
 
 const defaultFilters: SearchFilters = {
@@ -214,7 +213,7 @@ export default function App() {
                   </section>
                   <aside className="detail-column" aria-label="Карточка вакансии">
                     {!isMobile && <VacancyPager {...pager}/>}
-                    {activeVacancy && !isMobile ? <Suspense fallback={<DetailPlaceholder/>}><VacancyDetail onClosed={handleClosed} key={activeVacancy.id} vacancy={activeVacancy} saved={savedIds.has(activeVacancy.id)} onToggleSaved={() => toggleSave(activeVacancy)} onShare={() => void shareVacancy(activeVacancy)} /></Suspense> : <DetailPlaceholder />}
+                    {activeVacancy && !isMobile ? <VacancyDetail onClosed={handleClosed} key={activeVacancy.id} vacancy={activeVacancy} saved={savedIds.has(activeVacancy.id)} onToggleSaved={() => toggleSave(activeVacancy)} onShare={() => void shareVacancy(activeVacancy)} /> : <DetailPlaceholder />}
                   </aside>
                 </div>
               </>
@@ -223,19 +222,19 @@ export default function App() {
             {view === 'saved' && (
               <section className="saved-view">
                 <div className="page-intro"><span className="eyebrow"><Bookmark size={14} />Личная подборка</span><h1>Сохранённые <span>вакансии</span></h1><p>Вакансии с закладкой останутся в этом браузере после перезагрузки.</p></div>
-                {saved.length === 0 ? <div className="empty-state"><SearchX size={38} /><h2>Здесь пока пусто</h2><p>Сохраняйте вакансии закладкой — они останутся в браузере после перезагрузки.</p><button className="primary-button" type="button" onClick={() => navigate('search')}>Найти вакансии</button></div> : <div className="saved-layout"><section><VacancyList items={saved} selectedId={activeVacancy?.id ?? null} savedIds={savedIds} visibleCount={visibleCount} onSelect={selectVacancy} onToggleSaved={(vacancy) => { toggleSave(vacancy); if (isMobile) setMobileDetailId(null) }} onShowMore={() => setVisibleCount((count) => count + 12)} /></section><aside className="detail-column">{activeVacancy && !isMobile && <Suspense fallback={<DetailPlaceholder/>}><VacancyDetail onClosed={handleClosed} key={activeVacancy.id} vacancy={activeVacancy} saved onToggleSaved={() => { removeSaved(activeVacancy.id); setToast('Удалено из сохранённого') }} onShare={() => void shareVacancy(activeVacancy)} /></Suspense>}</aside></div>}
+                {saved.length === 0 ? <div className="empty-state"><SearchX size={38} /><h2>Здесь пока пусто</h2><p>Сохраняйте вакансии закладкой — они останутся в браузере после перезагрузки.</p><button className="primary-button" type="button" onClick={() => navigate('search')}>Найти вакансии</button></div> : <div className="saved-layout"><section><VacancyList items={saved} selectedId={activeVacancy?.id ?? null} savedIds={savedIds} visibleCount={visibleCount} onSelect={selectVacancy} onToggleSaved={(vacancy) => { toggleSave(vacancy); if (isMobile) setMobileDetailId(null) }} onShowMore={() => setVisibleCount((count) => count + 12)} /></section><aside className="detail-column">{activeVacancy && !isMobile && <VacancyDetail onClosed={handleClosed} key={activeVacancy.id} vacancy={activeVacancy} saved onToggleSaved={() => { removeSaved(activeVacancy.id); setToast('Удалено из сохранённого') }} onShare={() => void shareVacancy(activeVacancy)} />}</aside></div>}
               </section>
             )}
-            {view === 'salaries' && <Suspense fallback={<p role="status">Загружаем зарплаты…</p>}><SalaryMarketPage filters={defaultFilters} closedIds={closedIds} onOpen={setPayVacancy}/></Suspense>}
+            {view === 'salaries' && <SalaryMarketPage filters={defaultFilters} closedIds={closedIds} onOpen={setPayVacancy}/>}
             {view === 'stats' && <StatsView items={items} filters={filters} loading={loading} onBack={()=>navigate('search')} onFilter={next=>{updateFilters(next);navigate('search');showCatalog()}}/>}
-            {view === 'cities' && <Suspense fallback={<p role="status">Загружаем города…</p>}><CitiesView onCity={openCity} /></Suspense>}
-            {view === 'sources' && <Suspense fallback={<p role="status">Загружаем источники…</p>}><SourcesView sources={data?.sources ?? []} loading={loading} onRefresh={() => setReloadToken(Date.now())} /></Suspense>}
+            {view === 'cities' && <CitiesView onCity={openCity} />}
+            {view === 'sources' && <SourcesView sources={data?.sources ?? []} loading={loading} onRefresh={() => setReloadToken(Date.now())} />}
           </div>
       </main>
 
       <FiltersDrawer open={filtersOpen} onClose={() => setFiltersOpen(false)} filters={filters} sources={data?.sources ?? []} countries={data?.facets.countries ?? []} onChange={updateFilters} onReset={resetFilters} />
-      {view==='salaries' && payVacancy && <Suspense fallback={null}><VacancyDetailDialog vacancy={payVacancy} open saved={savedIds.has(payVacancy.id)} onClosed={handleClosed} onClose={()=>setPayVacancy(null)} onShare={()=>void shareVacancy(payVacancy)} onToggleSaved={()=>toggleSave(payVacancy)}/></Suspense>}
-      {isMobile && mobileVacancy && <Suspense fallback={null}><VacancyDetailDialog pager={pager} onClosed={handleClosed} vacancy={mobileVacancy} open={isMobile && Boolean(mobileVacancy)} saved={mobileVacancy ? savedIds.has(mobileVacancy.id) : false} onClose={() => setMobileDetailId(null)} onToggleSaved={() => mobileVacancy && toggleSave(mobileVacancy)} onShare={() => mobileVacancy && void shareVacancy(mobileVacancy)} /></Suspense>}
+      {view==='salaries' && payVacancy && <VacancyDetailDialog vacancy={payVacancy} open saved={savedIds.has(payVacancy.id)} onClosed={handleClosed} onClose={()=>setPayVacancy(null)} onShare={()=>void shareVacancy(payVacancy)} onToggleSaved={()=>toggleSave(payVacancy)}/>}
+      {isMobile && mobileVacancy && <VacancyDetailDialog pager={pager} onClosed={handleClosed} vacancy={mobileVacancy} open={isMobile && Boolean(mobileVacancy)} saved={mobileVacancy ? savedIds.has(mobileVacancy.id) : false} onClose={() => setMobileDetailId(null)} onToggleSaved={() => mobileVacancy && toggleSave(mobileVacancy)} onShare={() => mobileVacancy && void shareVacancy(mobileVacancy)} />}
       <div className={`toast ${toast ? 'visible' : ''}`} role="status" aria-live="polite" aria-atomic="true">{toast && <><CheckCircle2 size={18} />{toast}</>}</div>
       <button className={`mobile-filter-fab ${view === 'search' ? 'visible' : ''}`} type="button" onClick={() => setFiltersOpen(true)} aria-label="Открыть фильтры"><Filter size={19} /></button>
     </>

@@ -2,6 +2,7 @@ import { ArrowUpRight, Bookmark, BriefcaseBusiness, Building2, CalendarDays, Che
 import { useEffect, useRef, useState } from 'react'
 import { studios } from '../../server/providers/greenhouse'
 import { trudKey, registryUrl } from '../lib/trudLink'
+import { publishedDetail } from '../lib/publishedCatalog'
 import { publishedMode } from '../lib/siteMode'
 import { jobProfile, type JobDetails } from '../lib/jobProfile'
 import type { Vacancy } from '../types'
@@ -24,7 +25,6 @@ export function VacancyDetail({ vacancy:summary,saved,onToggleSaved,onShare,onCl
     const abort=new AbortController()
     async function load() {
       if(publishedMode){
-        const { publishedDetail }=await import('../lib/publishedCatalog')
         return publishedDetail(summary.source,summary.externalId,registryKey)
       }
       const response=await fetch('/api/vacancies/'+summary.source+'/'+encodeURIComponent(registryKey ?? summary.externalId),{signal:abort.signal,cache:'no-store'})
