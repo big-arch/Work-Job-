@@ -10,12 +10,12 @@ export function SearchHero({draft,onDraftChange,onSubmit,onQuickQuery,countries,
     <div className="navigator-copy">
       <span className="hero-overline"><Compass size={14}/> Карьерный навигатор</span>
       <h1 id="hero-heading">Где работать<br/><em>дальше?</em></h1>
-      <p>Найдите работу в инженерии, дизайне и IT.<br className="wide-break"/> В России и по всему миру.</p>
+      <p>Инженерия, IT, дизайн, 3D и анимация.<br className="wide-break"/> Вакансии в России и по всему миру.</p>
       <form className="navigator-search" role="search" onSubmit={e=>{e.preventDefault();onSubmit()}}>
         <Search size={19}/><input id="vacancy-search" type="search" aria-label="Должность, технология или компания" placeholder="Должность, навык или компания" value={draft} onChange={e=>onDraftChange(e.target.value)}/>
         <button type="submit">Найти <ArrowUpRight size={15}/></button>
       </form>
-      <div className="hero-links"><span>Например</span>{['BIM','Python','Product Designer'].map(q=><button key={q} onClick={()=>onQuickQuery(q)}>{q}</button>)}</div>
+      <div className="hero-links"><span>Например</span>{['BIM','3D Artist','Аниматор','Python'].map(q=><button key={q} onClick={()=>onQuickQuery(q)}>{q}</button>)}</div>
     </div>
     <WorldAtlas countries={countries} country={country} onChoose={onCountry}/>
   </section>

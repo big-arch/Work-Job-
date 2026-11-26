@@ -1,6 +1,8 @@
+import { mapLimit } from '../mapLimit'
 import { numericSalary } from '../salary'
 import { type Vacancy } from '../../src/types'
 import { fetchJson, plainText } from '../http'
+import { creativeQuery } from '../../src/lib/creativeRoles'
 import { detectDomain, normalizeSearch } from '../normalize'
 import type { ProviderDefinition } from '../../src/types'
 
@@ -24,6 +26,10 @@ interface Posting {
 }
 
 export const boards = [
+  { id: 'ubisoft', board: 'Ubisoft2', name: 'Ubisoft' },
+  { id: 'gameloft', board: 'Gameloft', name: 'Gameloft' },
+  { id: 'cdprojekt', board: 'CDPROJEKTRED', name: 'CD PROJEKT RED' },
+  { id: 'peoplecanfly', board: 'PeopleCanFly', name: 'People Can Fly' },
   { id: 'egis', board: 'EgisGroup', name: 'Egis' },
   { id: 'sixt', board: 'SIXT', name: 'SIXT' },
   { id: 'endava', board: 'Endava', name: 'Endava' },
@@ -63,7 +69,7 @@ export const cityProviders: ProviderDefinition[] = boards.map(board => ({
   id: board.id, name: board.name, homeUrl: home(board), kind: 'ats', cacheTtlMs: 10 * 60_000, queryAware: true,
   note: 'Публичные вакансии работодателя. Поиск по всем городам. Статус повторно проверяется при открытии карточки.',
   async fetch(filters) {
-    const query = normalizeSearch(filters.q)
+    const query = creativeQuery(filters.q).length ? '' : normalizeSearch(filters.q)
     const params = new URLSearchParams({ destination: 'PUBLIC', limit: '100' })
     if (query) params.set('q', query)
     const jobs: Vacancy[] = []
@@ -84,7 +90,20 @@ export const cityProviders: ProviderDefinition[] = boards.map(board => ({
       if (offset >= page.totalFound) break
       if (!page.content.length) throw Error('Источник вернул неполную страницу')
     }
-    return jobs
+    if ('document' in globalThis || !['ubisoft','gameloft','cdprojekt','peoplecanfly'].includes(board.id)) return jobs
+    // Enrich art roles before publishing so the tool filters work without opening each card.
+    const enriched = await mapLimit(jobs, 3, async job => {
+      if (job.domain !== '3d' && job.domain !== 'animation') return job
+      try {
+        const detail = await boardDetail(board, job.externalId)
+        return { ...job, description: detail.description, verifiedAt: detail.verifiedAt,
+          experience: detail.experience || job.experience, employment: detail.employment || job.employment,
+          department: detail.department || job.department, salary: detail.salary.text ? detail.salary : job.salary }
+      } catch (error) {
+        return [404,410].includes((error as {status?:number}).status ?? 0) ? null : job
+      }
+    })
+    return enriched.filter((job): job is Vacancy => job !== null)
   },
 }))
 
@@ -99,6 +118,7 @@ export async function boardDetail(board: Board, id: string) {
   const range=[comp?.min,comp?.max].filter((n):n is number=>typeof n==='number' && Number.isFinite(n) && n>0)
   return {
     description:parts.map(part=>part.text).join('\n\n'),sections:parts, ...postingFacts(job),
+    salary:numericSalary(comp?.min,comp?.max,comp?.currency,comp?.interval),
     pay:range.length?[range.join(' – '),comp?.currency,comp?.interval].filter(Boolean).join(' '):undefined,
     url:job.postingUrl?.startsWith(home(board)+'/') ? job.postingUrl : home(board)+'/'+id, verifiedAt:new Date().toISOString(),
   }

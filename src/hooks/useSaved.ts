@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { z } from 'zod'
-import { sourceIds, type Vacancy } from '../types'
+import { domains, sourceIds, type Vacancy } from '../types'
 
 const STORAGE_KEY = 'atlas-career-saved-v1'
 const httpUrl = z.string().url().refine((value) => value.startsWith('https://') || value.startsWith('http://'))
@@ -19,7 +19,7 @@ const vacancySchema = z.object({
   country: z.string().nullable(),
   countryCode: z.string().nullable(),
   workFormat: z.enum(['remote', 'hybrid', 'office', 'unspecified']),
-  domain: z.enum(['it', 'bim', 'design', 'other']),
+  domain: z.enum(domains),
   salary: z.object({
     text: z.string().nullable(),
     min: z.number().nullable(),

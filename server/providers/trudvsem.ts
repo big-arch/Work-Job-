@@ -1,6 +1,7 @@
 import { type SearchFilters, type Vacancy } from '../../src/types'
 import { fetchJson, plainText } from '../http'
 import { detectDomain, inferWorkFormat, normalizeSearch } from '../normalize'
+import { creativeQuery } from '../../src/lib/creativeRoles'
 import { numericSalary } from '../salary'
 import { PartialListings } from '../partialListings'
 import { registryUrl } from '../../src/lib/trudLink'
@@ -8,7 +9,9 @@ import { mapLimit } from '../mapLimit'
 
 const api = 'https://opendata.trudvsem.ru/api/v1/vacancies'
 const pageSize = 100
-export const rosterQueries = ['BIM', 'Revit', 'проектировщик', 'инженер-конструктор', 'архитектор', 'сметчик', 'инженер ПТО', 'разработчик', 'программист', 'дизайнер'] as const
+const artQueries = ['3D-художник', '3D-визуализатор', '3D-моделлер']
+const animationQueries = ['художник-аниматор', 'моушн-дизайнер']
+export const rosterQueries = ['BIM', 'Revit', 'проектировщик', 'инженер-конструктор', 'архитектор', 'сметчик', 'инженер ПТО', 'разработчик', 'программист', 'дизайнер', ...artQueries, ...animationQueries] as const
 interface Job {
   id: string
   'job-name'?: string
@@ -87,8 +90,11 @@ export async function trudQuery(query: string, pageLimit: number) {
 export async function fetchTrudvsem(filters: SearchFilters) {
   if (filters.q.trim()) {
     const query=normalizeSearch(filters.q)
-    if (query!=='bim') return trudQuery(filters.q.trim(),100)
-    const results=await Promise.allSettled(['BIM','Revit','информационное моделирование'].map(q=>trudQuery(q,100)))
+    const creative = creativeQuery(query)
+    const queries = query==='bim' ? ['BIM','Revit','информационное моделирование'] :
+      creative.includes('animation') ? animationQueries : creative.includes('3d') ? artQueries : []
+    if (!queries.length) return trudQuery(filters.q.trim(),100)
+    const results=await Promise.allSettled(queries.map(q=>trudQuery(q,100)))
     const jobs=results.flatMap(r=>r.status==='fulfilled'?r.value:r.reason instanceof PartialListings?r.reason.jobs:[])
     const unique=[...new Map(jobs.map(j=>[j.id,j])).values()]
     if(results.some(r=>r.status==='rejected')) throw new PartialListings(unique)

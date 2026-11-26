@@ -1,4 +1,5 @@
 import type { Vacancy } from '../../src/types'
+import { greenhouseListings } from './greenhouse'
 import { PartialListings } from '../partialListings'
 import { numericSalary } from '../salary'
 import { emptySalary } from '../../src/types'
@@ -9,37 +10,10 @@ import { appConfig } from '../config'
 const now = () => new Date().toISOString()
 const displayName = (value: string) => value.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 
-interface GreenhouseJob {
-  id: number
-  title: string
-  updated_at?: string
-  first_published?: string
-  absolute_url: string
-  location?: { name?: string }
-  content?: string
-  departments?: { name?: string }[]
-  offices?: { name?: string; location?: string }[]
-}
-
-async function fetchGreenhouseBoard(board: string): Promise<Vacancy[]> {
-  const data = await fetchJson<{ jobs: GreenhouseJob[] }>(`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs?content=true`)
-  const company = board === 'discord' ? 'Discord' : displayName(board)
-  const sourceUrl = board === 'discord' ? 'https://discord.com/careers' : `https://boards.greenhouse.io/${encodeURIComponent(board)}`
-  return data.jobs.map((job) => {
-    const description = plainText(job.content)
-    const locationText = job.location?.name ?? job.offices?.map((office) => office.name).join(', ')
-    const workFormat = inferWorkFormat(`${locationText} ${description.slice(0, 800)}`)
-    const location = inferLocation(locationText, workFormat === 'remote')
-    const tags = job.departments?.map((department) => department.name).filter((tag): tag is string => Boolean(tag)) ?? []
-    return {
-      id: `greenhouse:${board}:${job.id}`, externalId: `${board}:${job.id}`, source: 'greenhouse', sourceName: `Greenhouse · ${company}`, sourceUrl,
-      title: job.title, company, companyLogo: null, description,
-      city: location.city, country: location.country, countryCode: location.countryCode, workFormat,
-      domain: detectDomain(job.title, description, tags), salary: { ...emptySalary },
-      publishedAt: job.first_published ?? job.updated_at ?? null, verifiedAt: now(), url: safeUrl(job.absolute_url, sourceUrl), applyUrl: safeUrl(job.absolute_url, sourceUrl),
-      tags, isDemo: false, isTelegram: false,
-    }
-  })
+function fetchGreenhouseBoard(board: string) {
+  const name = board === 'discord' ? 'Discord' : displayName(board)
+  const home = board === 'discord' ? 'https://discord.com/careers' : 'https://job-boards.greenhouse.io/' + encodeURIComponent(board)
+  return greenhouseListings(board, name, home, 'greenhouse')
 }
 
 interface AshbyJob {

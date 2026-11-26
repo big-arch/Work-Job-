@@ -1,5 +1,6 @@
 import type { Domain, SearchFilters, Vacancy, WorkFormat } from '../src/types'
 
+import { creativeDisciplines, creativeQuery, matchesDomain } from '../src/lib/creativeRoles'
 import { matchesCity } from '../src/lib/cities'
 
 const bimPattern = /\b(bim|revit|navisworks|civil\s*3d|tekla|archicad|autocad|openbim|ifc|aec|тим|проектировщик|проектировани|архитектур|инженерные\s+сети|mep|digital\s+twin)\b/i
@@ -8,7 +9,7 @@ const itPattern = /\b(software|developer|programmer|разработчик|пр�
 
 const bimAlias = /(?<![\p{L}\d])(?:бим|тим|bim)(?![\p{L}\d])|информационн\p{L}*\s+моделирован\p{L}*|building information model(?:l?ing)?/giu
 export function normalizeSearch(value: string) {
-  return value.toLowerCase().replace(/тим[ -]лид/gu,'team lead').replace(bimAlias, 'bim').trim()
+  return value.toLowerCase().replace(/([23])д/gu, '$1d').replace(/тим[ -]лид/gu,'team lead').replace(bimAlias, 'bim').trim()
 }
 
 export function detectDomain(title: string, _description = '', tags: string[] = []): Domain {
@@ -17,6 +18,9 @@ export function detectDomain(title: string, _description = '', tags: string[] = 
   const nonTechnical = /\b(sales|marketing|business\s+development|go\s+to\s+market|security\s+officer|account\s+executive|customer\s+success|support\s+specialist|recruiter|recruiting|human\s+resources|people\s+operations|finance|legal|counsel|office\s+manager|executive\s+assistant|product\s+support|screenwriter|copywriter|lending\s+manager)\b/i
   const genericRole = /(front-?end|back-?end|full-?stack)/i.test(title) && !/developer|engineer|programmer|разработчик|программист|инженер/i.test(title)
   if (nonTechnical.test(title) || genericRole) return 'other'
+  const creative = creativeDisciplines(title, text + ' ' + _description.slice(0, 1200))
+  if (creative.animation) return 'animation'
+  if (creative.art) return '3d'
   if (/\b(civil|structural|mechanical|electrical|bridge|infrastructure)\s+(design\s+)?engineer|\barchitect(?:ural)?\b(?!.*(?:data|cloud|software|systems?))|проектировщик|архитектор|инженер.проектировщик|\bBIM\b/i.test(title) && !/software|cloud|data|solution|enterprise|security|IT architect/i.test(title)) return 'bim'
   if (/информационн[а-яё]* моделирован|инженер[\s-]*(?:конструктор|пто|сметчик)|сметчик|градостроител|конструктор|геодезист|техническ[а-яё]* надзор|строительн[а-яё]* контрол|\b(?:geotechnical|transportation|environmental|water|project|design|drainage|highway|traffic|construction) engineer|\b(?:quantity surveyor|design manager|civil designer)\b/iu.test(text)) return 'bim'
   if (/аналитик|информационн[а-яё]* безопасност|системн[а-яё]* администратор|сетевой инженер|бэкенд|фронтенд|бекенд|инженер.{0,12}данных|автоматизаци[а-яё]* тестирован|^инженер-программист/iu.test(title)) return 'it'
@@ -91,13 +95,14 @@ function relevanceScore(vacancy: Vacancy, query: string) {
 
 export function filterAndSort(vacancies: Vacancy[], filters: SearchFilters) {
   const query = normalizeSearch(filters.q)
-  const terms = query.split(/\s+/).filter(Boolean)
+  const required = creativeQuery(query)
+  const terms = required.length ? [] : query.split(/\s+/).filter(Boolean)
   const filtered = vacancies.filter((vacancy) => {
-    const currentDomain = vacancy.domain
+    if (required.length && !required.every(domain => matchesDomain(vacancy, domain))) return false
     if (vacancy.isDemo) return false
     if (filters.withSalary === '1' && !(vacancy.salary.min || vacancy.salary.max || /\d/.test(vacancy.salary.text || ''))) return false
     if (filters.postedWithin === '7' && !(vacancy.publishedAt && Date.parse(vacancy.publishedAt) >= Date.now() - 7 * 86400_000)) return false
-    if (filters.domain !== 'all' && currentDomain !== filters.domain) return false
+    if (filters.domain !== 'all' && !matchesDomain(vacancy, filters.domain)) return false
     if (filters.workFormat !== 'all' && vacancy.workFormat !== filters.workFormat) return false
     if (filters.country && filters.country !== 'all') {
       if ((vacancy.countryCode ?? vacancy.country) !== filters.country) return false
@@ -113,9 +118,11 @@ export function filterAndSort(vacancies: Vacancy[], filters: SearchFilters) {
     return true
   })
 
+  const scores = new Map<Vacancy, number>()
+  if (filters.sort === 'relevance' && query) for (const job of filtered) scores.set(job, relevanceScore(job, query))
   return filtered.sort((a, b) => {
     if (filters.sort === 'relevance' && query) {
-      const score = relevanceScore(b, query) - relevanceScore(a, query)
+      const score = scores.get(b)! - scores.get(a)!
       if (score !== 0) return score
       if (a.isTelegram !== b.isTelegram) return Number(a.isTelegram) - Number(b.isTelegram)
     }

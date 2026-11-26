@@ -15,6 +15,6 @@ export function withinDeadline(deadline?: string, now = Date.now()) {
 }
 
 export function currentListing(job: Vacancy, now = Date.now()) {
-  return !job.isDemo && recentCheck(job.verifiedAt, now) && withinDeadline(job.validThrough, now)
+  return !job.isDemo && !/\b(?:general application|open application|spontaneous application|talent (?:pool|community)|expression of interest)\b|кадровый резерв/i.test(job.title) && recentCheck(job.verifiedAt, now) && withinDeadline(job.validThrough, now)
     && (!job.isTelegram || (!!job.publishedAt && Date.parse(job.publishedAt) >= now - 30 * 86400_000))
 }

@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
+import { describedPay } from '../../src/lib/describedPay'
 import { emptySalary, type Vacancy } from '../../src/types'
 import { fetchText, plainText } from '../http'
 import { detectDomain, inferLocation, inferWorkFormat } from '../normalize'
@@ -16,28 +17,30 @@ const names: Record<string, string> = {
   architect_vacancies: 'Архитекторы', arkhitektory_chat: 'Архитектор · Дизайнер · Художник',
   vacancii_construction: 'Вакансии в строительстве', architectsandconstructors: 'Архитекторы и конструкторы России', job_in_project: 'Заказ проекта и сметы',
   bimwork: 'BIM вакансии · INT LINES', bim_tim_work: 'Проектирование · Revit, Renga, BIM',
+  cgfreelance: 'CG Freelance', gamedevjob: 'Работа в геймдеве', gamedevjobs: 'Gamedev Jobs',
   job_python: 'Python Job', remoteit: 'Remote IT', jobjava: 'Job Java',
 }
 const month = 30 * 24 * 60 * 60_000
-const hiring = /#(?:ваканси|vacanc|job\b|hiring)|ваканси[яиюй]|ищем\s+(?:в\s+команду|сотрудник|[\p{L}-]+)|ищет\s+(?:в команду|инженера|архитектора|специалиста)|требуется|нуж[а-яё]{2,4} (?:опытный |ведущий |главный )?(?:инженер|специалист|архитектор|проектировщик|разработчик|bim)|в поиске (?:ведущего |главного )?(?:проектировщик|инженер|архитектор|специалист|bim)|приглаша[а-яё]+ в команду|обязанности|мы предлагаем|we.re hiring|responsibilities|apply now|how to apply/iu
+const hiring = /#(?:ваканси|vacanc|job\b|hiring)|ваканси[яиюй]|ищем\s+(?:в\s+команду|сотрудник|[\p{L}-]+)|ищет\s+(?:в команду|инженера|архитектора|специалиста)|требуется|нуж[а-яё]{2,4} (?:опытный |ведущий |главный )?(?:инженер|специалист|архитектор|проектировщик|разработчик|bim)|в поиске (?:ведущего |главного )?(?:проектировщик|инженер|архитектор|специалист|bim)|приглаша[а-яё]+ в команду|обязанности|мы предлагаем|we.re hiring|responsibilities|apply now|how to apply|нуж[а-яё]* (?:[23][dд][- ]?)?(?:аниматор|художник|композер|визуализатор|моделлер)/iu
 const closed = /(?:ваканси[яию]|позици[яию]|набор)\s+(?:уже\s+)?(?:закрыт|в архиве|приостановлен|заверш[её]н)|#закрыта|поиск\s+(?:заверш[её]н|приостановлен)|(?:position|vacancy|role) (?:is |has been )?(?:closed|filled)|no longer accepting/i
-const editorial = /подборка.{0,36}ваканси|(?:лучшие|новые|топ).{0,18}вакансии за (?:неделю|месяц)|полезных постов|каталог семейств|зарабатывайте на своих|воркшоп|мастер-класс|нетворкинг|как (?:оформить|составить) (?:резюме|linkedin)|дайджест|#сообщество|стоимость размещения|правила (?:публикации|чата)/i
+const editorial = /подборка.{0,36}ваканси|(?:лучшие|новые|топ).{0,18}вакансии за (?:неделю|месяц)|полезных постов|каталог семейств|зарабатывайте на своих|воркшоп|мастер-класс|нетворкинг|как (?:оформить|составить) (?:резюме|linkedin)|(?:приглашаем|вступайте) в (?:закрытый )?канал|как найти работу|дайджест|#сообщество|стоимость размещения|правила (?:публикации|чата)/i
 const resume = /(?:^|\n)\s*(?:#резюме(?:\s|$)|ищу (?:работу|проект|подработку)|looking for (?:a job|work))/i
-const role = /bim[-‑–— ]|тим[-‑–— ]|архитектор|проектировщик|инженер|разработчик|дизайнер|моделлер|моделер|developer|engineer|designer|architect|devops/i
+const role = /bim[-‑–— ]|тим[-‑–— ]|архитектор|проектировщик|инженер|разработчик|дизайнер|моделлер|моделер|developer|engineer|designer|architect|devops|artist|animator|rigger|художник|аниматор|визуализатор|generalist|композер|моушн/i
 type Post = { id: number; date: string; text: string }
 export function telegramVacancy(username: string, post: Post): Vacancy | null {
   const date = Date.parse(post.date)
   const description = post.text.trim()
   if (!Number.isSafeInteger(post.id) || post.id < 1 || !Number.isFinite(date) || date < Date.now() - month || date > Date.now() + 60_000) return null
   if (editorial.test(description.split('\n').slice(0, 2).join(' ').slice(0, 350))) return null
-  if (description.length < 45 || !hiring.test(description) || closed.test(description) || resume.test(description.slice(0, 360))) return null
+  const boardPost = username === 'gamedevjobs' && /^[^\n|]{3,100}\s+\|\s+[^\n|]{3,100}\s+\|\s+[^\n|]+/i.test(description) && /https:\/\/teletype\.in\/@remoteit\//i.test(description)
+  if (description.length < 45 || !(hiring.test(description) || boardPost) || closed.test(description) || resume.test(description.slice(0, 360))) return null
   if (/#сообщество|наша общественная миссия|разместить вакансию|правила (публикации|чата)|стоимость размещения|подборка вакансий|дайджест вакансий/i.test(description.slice(0, 180))) return null
   const labels = description.split('\n').map(line => line.replace(/^\s*(?:#[\p{L}\d_]+\s*)+/gu, '').trim()).filter(line => line.length > 3 && !/^https?:/i.test(line))
   const candidate = labels.slice(0, 7).find(line => role.test(line)) ?? labels[0]
   if (!candidate) return null
   const segments = candidate.split(/\s+\|\s+/)
-  const structured = username === 'remoteit' && segments.length === 3
-  const title = (structured ? segments[0] : candidate).replace(/^(?:вакансия|vacancy)\s*[:–-]\s*/i, '').split(/\s+#|https?:\/\//i)[0].trim().slice(0, 180)
+  const structured = (username === 'remoteit' || boardPost) && segments.length === 3
+  const title = (structured ? segments[0] : candidate).replace(/^[^\p{L}\d]+/u,'').replace(/^(?:вакансия|vacancy)\s*[:–-]\s*/i, '').split(/\s+#|https?:\/\//i)[0].trim().slice(0, 180)
   if (!title) return null
   const tags = [...description.matchAll(/#[\p{L}\d_]+/gu)].map(match => match[0]).slice(0, 24)
   const city = description.match(/(?:город|локация|location)\s*[:–-]\s*([^\n]{2,100})/i)?.[1]
@@ -51,9 +54,9 @@ export function telegramVacancy(username: string, post: Post): Vacancy | null {
   const url = 'https://t.me/' + username + '/' + post.id
   return {
     id: 'telegram:' + externalId, externalId, source: 'telegram', sourceName: 'Telegram · ' + (names[username] ?? username),
-    sourceUrl: 'https://t.me/' + username, title, company: explicitCompany || (structured ? segments[2] : 'Работодатель не указан'),
+    sourceUrl: 'https://t.me/' + username, title, company: explicitCompany || (structured ? segments[2].split(/\s+#|\s+https?:/)[0].trim() : 'Работодатель не указан'),
     companyLogo: null, description, ...geo, workFormat, domain: detectDomain(title, description, tags),
-    salary: { ...emptySalary, text: description.match(/(?:зарплата|salary)\s*[:–-]\s*([^\n]{2,100})/i)?.[1]?.trim() ?? null },
+    salary: { ...emptySalary, text: describedPay(description) },
     publishedAt: post.date, verifiedAt: new Date().toISOString(), url, applyUrl: url, tags, isDemo: false, isTelegram: true,
   }
 }

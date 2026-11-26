@@ -1,3 +1,4 @@
+import { describedPay } from './describedPay'
 import type { Vacancy } from '../types'
 
 export interface JobSection { label:string; text:string }
@@ -25,17 +26,10 @@ function splitDescription(text:string) {
   flush()
   return result
 }
-const skillList=['Revit','Navisworks','AutoCAD','Civil 3D','BIM 360','ACC','Dynamo','Tekla','ArchiCAD','Renga','Solibri','IFC','MicroStation','OpenRoads','Rhino','Grasshopper','Python','TypeScript','JavaScript','React','SQL','C#','Figma','SketchUp']
-export function jobProfile(v:Vacancy, details:JobDetails|null){
-  const text = details?.description || v.description || ''
-  const sections = details?.sections?.length ? details.sections : splitDescription(text)
-  const lines = text.split(/\n|(?<=[.!?])\s+/).map(x=>x.trim()).filter(Boolean)
-  const salaryLine=lines.find(line=>/(?:зарплат[ауы]|оклад|salary range|base salary|pay range)/i.test(line) && /(?:\d[\d\s,.–-]*\s*(?:₽|руб|тыс|usd|eur|gbp)|[$€£]\s?\d)/i.test(line))
-  const experience=details?.experience || v.experience || lines.find(line=>line.length<200 && /(?:опыт.{0,23}(?:от\s*)?\d+\s*(?:лет|года?)|\d+[+–-]?\s*(?:years?.{0,16}experience|лет опыта))/i.test(line))
-  const employment=details?.employment || v.employment || text.match(/полный рабочий день|частичная занятость|полная занятость|проектная занятость|full[- ]time|part[- ]time/i)?.[0]
-  const docs=lines.filter(line=>/visa sponsorship|sponsor.{0,18}visa|work permit|relocation (?:package|support|assistance)|оплат.{0,15}переезд|помощь с переездом|разрешени[ея] на работу/i.test(line)).slice(0,3)
-  const skillText=(v.title+' '+text+' '+v.tags.join(' ')).toLowerCase()
-  const found=skillList.filter(skill=>{
+const skillList=['Revit','Navisworks','AutoCAD','Civil 3D','BIM 360','ACC','Dynamo','Tekla','ArchiCAD','Renga','Solibri','IFC','MicroStation','OpenRoads','Rhino','Grasshopper','Python','TypeScript','JavaScript','React','SQL','C#','Figma','SketchUp','Blender','Maya','3ds Max','ZBrush','Substance Painter','Substance Designer','Houdini','Nuke','Unreal Engine','Unity','After Effects','Cinema 4D','Spine','MotionBuilder','Toon Boom','Arnold','V-Ray','Redshift','Marvelous Designer']
+function extractSkills(v: Vacancy, description: string) {
+  const skillText=(v.title+' '+description+' '+v.tags.join(' ')).toLowerCase()
+  return skillList.filter(skill=>{
     const key=skill.toLowerCase()
     let pos=skillText.indexOf(key)
     while(pos>=0){
@@ -44,6 +38,24 @@ export function jobProfile(v:Vacancy, details:JobDetails|null){
     }
     return false
   })
+}
+const skillCache = new WeakMap<Vacancy,string[]>()
+export function listedSkills(job: Vacancy) {
+  let skills = skillCache.get(job)
+  if (!skills) { skills = extractSkills(job, job.description); skillCache.set(job, skills) }
+  return skills
+}
+export const creativeTools = skillList.slice(skillList.indexOf('Blender'))
+
+export function jobProfile(v:Vacancy, details:JobDetails|null){
+  const text = details?.description || v.description || ''
+  const sections = details?.sections?.length ? details.sections : splitDescription(text)
+  const lines = text.split(/\n|(?<=[.!?])\s+/).map(x=>x.trim()).filter(Boolean)
+  const salaryLine=describedPay(text) || lines.find(line=>/(?:зарплат[ауы]|оклад|salary range|base salary|pay range)/i.test(line) && /(?:\d[\d\s,.–-]*\s*(?:₽|руб|тыс|usd|eur|gbp)|[$€£]\s?\d)/i.test(line))
+  const experience=details?.experience || v.experience || lines.find(line=>line.length<200 && /(?:опыт.{0,23}(?:от\s*)?\d+\s*(?:лет|года?)|\d+[+–-]?\s*(?:years?.{0,16}experience|лет опыта))/i.test(line))
+  const employment=details?.employment || v.employment || text.match(/полный рабочий день|частичная занятость|полная занятость|проектная занятость|full[- ]time|part[- ]time/i)?.[0]
+  const docs=lines.filter(line=>/visa sponsorship|sponsor.{0,18}visa|work permit|relocation (?:package|support|assistance)|оплат.{0,15}переезд|помощь с переездом|разрешени[ея] на работу/i.test(line)).slice(0,3)
+  const found = details?.description ? extractSkills(v, text) : listedSkills(v)
   const skills=[...new Set([...(details?.skills??[]),...found])].slice(0,16)
   return { sections, skills, salary:v.salary.text || details?.pay || salaryLine, employment, experience, docs }
 }

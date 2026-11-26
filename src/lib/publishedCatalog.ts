@@ -1,5 +1,6 @@
 import type { SearchFilters, SourceHealth, Vacancy, VacancyResponse } from '../types'
 import { recentCheck, currentListing } from './freshness'
+import { studios, studioDetail, studioProviders } from '../../server/providers/greenhouse'
 import { boards, cityProviders, boardDetail } from '../../server/providers/cityBoards'
 import { fetchTrudvsem, trudDetail } from '../../server/providers/trudvsem'
 import { PartialListings } from '../../server/partialListings'
@@ -10,7 +11,7 @@ import type { PublicCatalog } from './publicCatalogTypes'
 let catalog: Promise<PublicCatalog> | undefined
 let loadedAt = 0
 let forcedAt = 0
-const liveBoards = new Map<string, { expires: number; jobs: Promise<Vacancy[]> }>()
+const liveBoards = new Map<string, { expires: number; jobs: Promise<{jobs:Vacancy[]; checkedAt:string}> }>()
 const rejectedJobs = new Set<string>()
 
 async function fetchCatalog() {
@@ -54,7 +55,7 @@ function liveListings(provider: LiveSource, filters: SearchFilters, revision: nu
   const known = liveBoards.get(key)
   if (known && known.expires > Date.now()) return known.jobs
   for (const [k,v] of liveBoards) if (v.expires <= Date.now()) liveBoards.delete(k)
-  const jobs = provider.fetch(filters).catch(error => { liveBoards.delete(key); throw error })
+  const jobs = provider.fetch(filters).then(jobs=>({jobs,checkedAt:new Date().toISOString()})).catch(error => { liveBoards.delete(key); throw error })
   liveBoards.set(key, { expires: Date.now() + 5 * 60_000, jobs })
   return jobs
 }
@@ -68,14 +69,14 @@ export async function publishedSearch(filters: SearchFilters, phase: 'cache' | '
   let items = fresh ? snapshot.items.filter(job => inSource(job, filters.source) && !rejectedJobs.has(job.id)).map(job =>
     upstreamMatches.has(job.id) && filters.q ? {...job, matchedQuery:normalizeSearch(filters.q)} : job) : []
   if (phase === 'live' && (filters.q.trim() || !fresh || revision > 0 && filters.source !== 'all')) {
-    const direct: LiveSource[] = [...cityProviders]
+    const direct: LiveSource[] = [...cityProviders, ...(!fresh || filters.source !== 'all' ? studioProviders : [])]
     if (filters.q.trim()) direct.push({id:'trudvsem',fetch:fetchTrudvsem})
     const active = direct.filter(p => filters.source === 'all' || filters.source === p.id)
     const results = await Promise.all(active.map(async provider => {
       const health = sourceRows.get(provider.id)!
       try {
-        const jobs = await liveListings(provider, filters, revision)
-        return { id:provider.id, jobs, health:{...health,status:'online',error:null,count:jobs.length,fetchedAt:new Date().toISOString()} as SourceHealth }
+        const {jobs,checkedAt} = await liveListings(provider, filters, revision)
+        return { id:provider.id, jobs, health:{...health,status:'online',error:null,count:jobs.length,fetchedAt:checkedAt} as SourceHealth }
       } catch (error) {
         if (error instanceof PartialListings && error.jobs.length) {
           return {id:provider.id,jobs:error.jobs,health:{...health,status:'degraded',count:error.jobs.length,error:error.message,fetchedAt:new Date().toISOString()} as SourceHealth}
@@ -86,10 +87,17 @@ export async function publishedSearch(filters: SearchFilters, phase: 'cache' | '
     }))
     for (const result of results) {
       sourceRows.set(result.id,result.health)
-      if (result.jobs) items = [...items.filter(job => job.source !== result.id), ...result.jobs.filter(job => !rejectedJobs.has(job.id))]
+      if (result.jobs) {
+        const known = new Map(items.filter(job=>job.source===result.id && job.description).map(job=>[job.id,job]))
+        const current = result.jobs.filter(job=>!rejectedJobs.has(job.id)).map(job => {
+          const previous = known.get(job.id)
+          return !job.description && previous && currentListing(previous) ? { ...job, description: previous.description } : job
+        })
+        items = [...items.filter(job=>job.source!==result.id), ...current]
+      }
     }
   }
-  return catalogResponse(items, filters, [...sourceRows.values()], snapshot.fetchedAt)
+  return catalogResponse(items, filters, [...sourceRows.values()])
 }
 
 export async function publishedDetail(source: string, externalId: string, registryKey: string | null = null) {
@@ -102,9 +110,10 @@ export async function publishedDetail(source: string, externalId: string, regist
       throw error
     }
   }
+  const studio = studios.find(entry => entry.id === source)
   const board = boards.find(entry => entry.id === source)
-  if (board && /^\d+$/.test(externalId)) {
-    try { return await boardDetail(board, externalId) }
+  if ((board || studio) && /^\d+$/.test(externalId)) {
+    try { return studio ? await studioDetail(studio, externalId) : await boardDetail(board!, externalId) }
     catch (error) {
       const status = (error as {status?: number}).status
       if (status === 404 || status === 410) { rejectedJobs.add(source+':'+externalId); throw Object.assign(Error('Объявление закрыто'), {status:410}) }

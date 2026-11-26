@@ -1,0 +1,62 @@
+/* Browsing, comparing and paging vacancies */
+.direction-picker {margin:8px 0 13px}
+.direction-picker .catalog-controls {gap:7px;margin:0}
+.direction-picker .catalog-controls button {display:inline-flex;align-items:center;gap:7px;min-height:38px;padding:7px 12px;font-size:13px}
+.catalog-controls button svg {width:16px;height:16px}
+.catalog-controls button small,.tool-filters small {font-variant-numeric:tabular-nums;font-weight:650;font-size:11px;opacity:.85}
+.tool-filters {display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.tool-filters b {font-size:12px;margin-right:3px;color:var(--muted)}
+.tool-filters button {font-size:12px;border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:#fff;color:#284a42}
+.tool-filters button[aria-pressed=true]{background:#dff2bf;border-color:#8caf6a;color:#122d28}
+.glance-card {position:relative;isolation:isolate;padding:17px 18px 0;border-radius:12px;animation:none;translate:none}
+.glance-card:hover {translate:none;border-color:#a3bcae;box-shadow:0 3px 12px #1c45360e}
+.glance-card.selected {background:#f7faf5;border-color:#82a680;box-shadow:inset 3px 0 #5e8858}
+.glance-eyebrow {display:flex;align-items:center;gap:6px;margin:0 40px 7px 0;color:#4c655e;font-size:11px;font-weight:650}
+.discipline-mark {height:7px;width:7px;background:#778984;border-radius:2px;transform:rotate(45deg)}
+.kind-3d {background:#7270bc}.kind-animation {background:#bd6b39}.kind-bim {background:#4a8c65}.kind-it {background:#5486a8}
+.glance-card h2 {margin:0;padding:0 26px 0 0;font-size:clamp(18px,1.35vw,22px);line-height:1.18;overflow-wrap:anywhere}
+.glance-card .vacancy-card-main {display:block;width:auto;font:inherit;color:inherit;letter-spacing:inherit;padding:0;text-align:left;border-radius:0}
+.glance-card .vacancy-card-main::after {content:'';position:absolute;inset:0;border-radius:12px;z-index:1}
+.glance-card .vacancy-card-main:focus-visible {outline:0}
+.glance-card .vacancy-card-main:focus-visible::after {outline:3px solid #326857;outline-offset:2px}
+.glance-company {display:flex;align-items:center;gap:7px;margin:9px 0 13px;color:#3c554e;font-size:13px;overflow-wrap:anywhere}
+.glance-company .company-logo {width:24px;height:24px;font-size:9px;border-radius:6px}
+.glance-company strong {font-weight:600}
+.glance-pay {display:flex;align-items:flex-start;gap:7px;color:#1d563e;font-size:15px;font-weight:720;line-height:1.35;overflow-wrap:anywhere}
+.glance-pay svg {flex:none;margin-top:2px}
+.glance-pay.unspecified {color:#576964;font-size:13px;font-weight:500}
+.glance-conditions {display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:9px 0 12px;font-size:12px;color:#3d544f}
+.glance-conditions span,.glance-origin span {display:inline-flex;align-items:center;gap:5px;min-width:0;overflow-wrap:anywhere}
+.glance-conditions svg,.glance-origin svg {width:14px;height:14px;flex:none;color:#668078}
+.glance-skills {display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}
+.glance-skills span {padding:3px 7px;font-size:11px;font-weight:600;border-radius:5px;background:#edf2ee;color:#3b5647}
+.glance-origin {display:flex;align-items:center;justify-content:space-between;gap:6px 12px;flex-wrap:wrap;border-top:1px solid #dfE7e0;padding:9px 0;color:#596d64;font-size:11px;line-height:1.4}
+.glance-origin .glance-chevron {width:13px;height:13px}
+.glance-card .save-button {top:7px;right:7px;width:38px;height:38px;z-index:2}
+.glance-card .save-button.saved {color:#24593f;background:#e0eed5}
+.vacancy-pager {display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px;line-height:1.4;font-variant-numeric:tabular-nums}
+.vacancy-pager b {color:var(--ink)}
+.vacancy-pager button {display:grid;place-items:center;width:36px;height:36px;border-radius:9px;background:transparent;border:1px solid var(--line);color:var(--accent)}
+.vacancy-pager button:disabled {opacity:.33;cursor:default}
+.vacancy-profile .detail-actions {margin:13px 0 16px}
+.coverage-note {margin:0 0 9px;line-height:1.45;font-size:12px;color:var(--muted)}
+.coverage-note a {text-decoration:underline;text-underline-offset:2px}
+@media (hover:hover) {.direction-picker button:hover,.vacancy-pager button:enabled:hover {border-color:#80a88f}.glance-card:hover .glance-chevron {transform:translateX(2px)}}
+@keyframes bookmark-set {0%{transform:scale(.83)}55%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes detail-reveal {from{transform:translateY(4px)}to{transform:translateY(0)}}
+@media (prefers-reduced-motion:no-preference) {
+  .glance-card .save-button.saved svg,.catalog-controls button[aria-pressed=true] svg {animation:bookmark-set .21s ease-out}
+  .glance-chevron,.vacancy-pager button,.tool-filters button {transition:transform .15s ease-out, background-color .15s ease-out,border-color .15s ease-out}
+  .vacancy-pager button:enabled:active,.tool-filters button:active {transform:scale(.95)}
+  .vacancy-profile,.tool-filters {animation:detail-reveal .16s ease-out}
+}
+@media(max-width:640px) {
+  .direction-picker .catalog-controls {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+  .direction-picker .catalog-controls button {justify-content:flex-start;text-align:left;min-height:40px;padding:6px 8px;font-size:12px;border-radius:9px;gap:5px}
+  .catalog-controls button small {margin-left:auto}
+  .glance-card {padding:15px 14px 0}
+  .glance-card .save-button,.vacancy-pager button {width:44px;height:44px}
+  .tool-filters button {min-height:34px}
+  .atlas-links {grid-template-columns:repeat(6,minmax(0,1fr))}
+  .atlas-links a {min-width:0}
+}

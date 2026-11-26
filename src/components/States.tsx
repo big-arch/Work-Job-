@@ -4,8 +4,8 @@ export function VacancySkeleton() {
   return <div className="skeleton-list" aria-label="Загрузка вакансий">{Array.from({ length: 5 }, (_, index) => <div className="skeleton-card" key={index}><i /><span /><span /><span /></div>)}</div>
 }
 
-export function EmptyState({ onReset }: { onReset: () => void }) {
-  return <div className="empty-state"><SearchX size={38} /><h2>Точных совпадений нет</h2><p>Попробуйте убрать часть фильтров или изменить запрос.</p><button className="secondary-button" type="button" onClick={onReset}>Сбросить фильтры</button></div>
+export function EmptyState({ onReset, partial = false }: { onReset: () => void; partial?: boolean }) {
+  return <div className="empty-state"><SearchX size={38} /><h2>{partial?'В доступных лентах совпадений нет':'Точных совпадений нет'}</h2><p>Попробуйте убрать часть фильтров или изменить запрос.</p><button className="secondary-button" type="button" onClick={onReset}>Сбросить фильтры</button></div>
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {

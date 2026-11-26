@@ -14,6 +14,9 @@ import { telegramDetail } from './providers/telegram'
 import { superjobDetail } from './providers/russianBoards'
 import { hhDetail } from './providers/boards'
 
+import { studios, studioDetail } from './providers/greenhouse'
+import { domains } from '../src/types'
+
 const app = express()
 const instance = createHash('sha256').update(resolve('.').toLowerCase()).digest('hex')
 const port = Number(process.env.PORT ?? 8787)
@@ -33,10 +36,11 @@ app.get('/api/sources', (_request, response) => {
 app.get('/api/vacancies', async (request: Request, response: Response) => {
   const query = request.query
   const filters: SearchFilters = {
+    skill: typeof query.skill === 'string' ? query.skill.slice(0,45) : '',
     withSalary:query.withSalary === '1' ? '1' : '',postedWithin:query.postedWithin === '7' ? '7' : '',
     q: typeof query.q === 'string' ? query.q.slice(0, 160) : '',
     city: typeof query.city === 'string' ? query.city.slice(0, 40) : '',
-    domain: ['it', 'bim', 'design', 'other'].includes(String(query.domain)) ? query.domain as SearchFilters['domain'] : 'all',
+    domain: domains.some(domain => domain === query.domain) ? query.domain as SearchFilters['domain'] : 'all',
     workFormat: ['remote', 'hybrid', 'office', 'unspecified'].includes(String(query.workFormat)) ? query.workFormat as SearchFilters['workFormat'] : 'all',
     country: typeof query.country === 'string' ? query.country.slice(0, 40) : 'all',
     source: (query.source === 'telegram' || providers.some(p => p.id === query.source) || restrictedSources.some(p => p.id === query.source)) ? query.source as SearchFilters['source'] : 'all',
@@ -54,15 +58,16 @@ app.get('/api/vacancies', async (request: Request, response: Response) => {
 app.get('/api/vacancies/:source/:id', async (request, response) => {
   const { source, id } = request.params
   const board = boards.find(item => item.id === source)
+  const studio = studios.find(item => item.id === source)
   const isTelegram = source === 'telegram' && /^[a-z0-9_]{4,32}:\d+$/.test(id)
   const isTrud = source === 'trudvsem' && !!registryUrl(id)
-  if (!isTelegram && !isTrud && (!(board || source === 'hh' || source === 'superjob') || !/^\d{1,24}$/.test(id))) {
+  if (!isTelegram && !isTrud && (!(board || studio || source === 'hh' || source === 'superjob') || !/^\d{1,24}$/.test(id))) {
     response.sendStatus(404)
     return
   }
   response.setHeader('Cache-Control', 'no-store')
   try {
-    response.json(await (isTrud ? trudDetail(id) : board ? boardDetail(board, id) : isTelegram ? telegramDetail(id) : source === 'superjob' ? superjobDetail(id) : hhDetail(id)))
+    response.json(await (isTrud ? trudDetail(id) : board ? boardDetail(board, id) : studio ? studioDetail(studio, id) : isTelegram ? telegramDetail(id) : source === 'superjob' ? superjobDetail(id) : hhDetail(id)))
   } catch (e) {
     if ([404, 410].includes((e as { status?: number }).status ?? 0)) {
       markClosed(source + ':' + (isTrud ? id.split(':')[1] : id))

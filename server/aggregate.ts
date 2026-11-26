@@ -1,4 +1,5 @@
 import type { SearchFilters, SourceHealth, VacancyResponse } from '../src/types'
+import { recentCheck, currentListing } from '../src/lib/freshness'
 import { CACHE_PREFIX, loadCache, saveCache } from './cache'
 import { catalogResponse } from '../src/lib/catalogResponse'
 import { errorMessage, normalizeSearch } from './normalize'
@@ -32,7 +33,9 @@ function providerBatch(provider: ProviderDefinition, filters: SearchFilters, cac
   const recentFailure = failures.get(key)
   if (recentFailure && Date.now() - recentFailure.at < 60_000) return Promise.resolve(recentFailure.result)
   if (fresh) return Promise.resolve(batch(cached.jobs, cached.partial ? 'degraded' : 'online', cached.fetchedAt, cached.partial ? 'Часть страниц источника недоступна.' : null))
-  if (cacheOnly) return Promise.resolve(batch([], 'disabled', null, null))
+  if (cacheOnly) return Promise.resolve(cached && recentCheck(cached.fetchedAt)
+    ? batch(cached.jobs.filter(job=>currentListing(job)), 'degraded', cached.fetchedAt, 'Обновляем ленту.')
+    : batch([], 'disabled', cached?.fetchedAt ?? null, null))
   const ongoing = pending.get(key)
   if (ongoing) return ongoing
   const result = provider.fetch(filters).then(jobs => {
@@ -44,7 +47,9 @@ function providerBatch(provider: ProviderDefinition, filters: SearchFilters, cac
     return batch(jobs, 'online', fetchedAt, null)
   }).catch(error => {
     const partial = error instanceof PartialListings && error.jobs.length > 0
-    const result = batch(partial ? error.jobs : [], partial ? 'degraded' : 'unavailable', partial ? new Date().toISOString() : null, errorMessage(error))
+    const fallback = cached && recentCheck(cached.fetchedAt) ? cached.jobs.filter(job=>currentListing(job)) : []
+    const result = batch(partial ? error.jobs : fallback, partial || fallback.length ? 'degraded' : 'unavailable',
+      partial ? new Date().toISOString() : cached?.fetchedAt ?? null, errorMessage(error))
     if (partial) {
       cache.set(key,{jobs:result.jobs,fetchedAt:result.health.fetchedAt!,partial:true})
       saveCache(cache)
@@ -69,7 +74,7 @@ export async function aggregate(filters: SearchFilters, cacheOnly = false): Prom
   const sources = [...results.map((result) => result.health), ...skippedHealth, ...restrictedSources]
   for (const [id, at] of closedJobs) if (Date.now() - at > 24 * 60 * 60_000) closedJobs.delete(id)
   const jobs = results.flatMap(result=>result.jobs).filter(job=>!closedJobs.has(job.id))
-  return catalogResponse(jobs, filters, sources, new Date().toISOString())
+  return catalogResponse(jobs, filters, sources)
 }
 
 export function sourceRegistry() {

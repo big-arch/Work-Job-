@@ -2,6 +2,7 @@ import type { ProviderDefinition, SourceHealth } from '../src/types'
 import { fetchArbeitnow, fetchHh, fetchRemoteOk, fetchRemotive } from './providers/boards'
 import { appConfig } from './config'
 import { russianEmployers } from './providers/russianEmployers'
+import { studioProviders } from './providers/greenhouse'
 import { cityProviders } from './providers/cityBoards'
 import { atsProviders } from './providers/ats'
 import { telegramProviders } from './providers/telegram'
@@ -13,6 +14,7 @@ export type { ProviderDefinition } from '../src/types'
 
 export const providers: ProviderDefinition[] = [
   ...cityProviders,
+  ...studioProviders,
   ...russianEmployers,
   ...(appConfig.leverBoards.length ? [{ id: 'lever', name: 'Lever', kind: 'ats' as const, homeUrl: 'https://jobs.lever.co/' + encodeURIComponent(appConfig.leverBoards[0]), note: 'Официальные объявления настроенных работодателей.', cacheTtlMs: 60 * 60_000, fetch: atsProviders.lever }] : []),
   { id: 'trudvsem', name: 'Работа России', homeUrl: 'https://trudvsem.ru', kind: 'job-board', queryAware: true, cacheTtlMs: 10 * 60_000, note: 'Открытые данные Роструда. Поиск по страницам в пределах лимита открытого API.', fetch: fetchTrudvsem },

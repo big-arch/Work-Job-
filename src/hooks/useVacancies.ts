@@ -1,62 +1,90 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { publishedMode } from '../lib/siteMode'
-import type { SearchFilters, VacancyResponse } from '../types'
+import { projectCatalog } from '../lib/catalogResponse'
+import { feedLifetime } from '../lib/freshness'
+import type { SearchFilters, Vacancy, VacancyResponse } from '../types'
 
+interface Result { key: string; data: VacancyResponse | null; error: string | null; loading: boolean }
+
+// Only a search term or source can change an upstream request. Other controls act on the loaded rows.
 export function useVacancies(filters: SearchFilters, reloadToken: number) {
-  const [state, setState] = useState<{ key: string; data: VacancyResponse | null; error: string | null; loading: boolean } | null>(null)
-  const [refresh,setRefresh] = useState(0)
-  useEffect(()=>{
-    let last=Date.now()
-    const check=()=>{
-      if(document.visibilityState==='visible' && Date.now()-last>=5*60_000){last=Date.now();setRefresh(n=>n+1)}
+  const { q, source } = filters
+  const upstream = useMemo<SearchFilters>(() => ({ q, source, domain: 'all', workFormat: 'all', country: 'all', sort: 'relevance' }), [q, source])
+  const [state, setState] = useState<Result | null>(null)
+  const [catalog, setCatalog] = useState<VacancyResponse | null>(null)
+  const [refresh, setRefresh] = useState(0)
+  const [clock, setClock] = useState(() => Date.now())
+  const key = JSON.stringify([q, source, reloadToken, refresh])
+  const raw = state?.key === key && state.data ? state.data : catalog
+  const nextExpiry = useMemo(() => {
+    let next = Infinity
+    for (const job of raw?.items ?? []) {
+      for (const end of deadlines(job)) if (end > clock && end < next) next = end
     }
-    const timer=window.setInterval(check,60_000)
-    document.addEventListener('visibilitychange',check)
-    return ()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',check)}
-  },[])
-  const key = JSON.stringify([filters, reloadToken, refresh])
+    return next
+  }, [raw, clock])
+
+  useEffect(() => {
+    if (!Number.isFinite(nextExpiry)) return
+    const timer = window.setTimeout(() => setClock(Date.now()), Math.max(1, nextExpiry - Date.now() + 1))
+    return () => window.clearTimeout(timer)
+  }, [nextExpiry])
+
+  useEffect(() => {
+    let last = Date.now()
+    const check = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - last >= 5 * 60_000) { last = Date.now(); setClock(last); setRefresh(n => n + 1) }
+    }
+    const timer = window.setInterval(check, 60_000)
+    document.addEventListener('visibilitychange', check)
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', check) }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
-    const params = new URLSearchParams()
-    for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+    const params = new URLSearchParams(Object.entries(upstream))
     let finished = false
     let timer: number | undefined
-    const loadPhase = async (phase: 'cache' | 'live') => {
+    async function load(phase: 'cache' | 'live') {
       if (publishedMode) {
         const { publishedSearch } = await import('../lib/publishedCatalog')
-        return publishedSearch(filters, phase, reloadToken)
+        return publishedSearch(upstream, phase, reloadToken)
       }
       const response = await fetch('/api/vacancies?' + params + '&phase=' + phase, { signal: controller.signal, cache: 'no-store' })
       if (!response.ok) throw Error('Ошибка сервера ' + response.status)
       return await response.json() as VacancyResponse
     }
-    const showProgress = async () => {
+    function display(data: VacancyResponse, loading: boolean) {
+      setClock(Date.now())
+      if (!upstream.q && upstream.source === 'all') setCatalog(data)
+      setState({ key, data, loading, error: null })
+    }
+    async function cached() {
       if (finished || controller.signal.aborted) return
       try {
-        const snapshot = await loadPhase('cache')
-        if (!finished && !controller.signal.aborted && snapshot.items.length) setState({ key, data: snapshot, loading: true, error: null })
-      } catch { /* The live request reports the final status. */ }
-      if (!publishedMode && !finished && !controller.signal.aborted) timer = window.setTimeout(() => void showProgress(), 3500)
+        const data = await load('cache')
+        if (!finished && !controller.signal.aborted && data.items.length) display(data, true)
+      } catch { /* The live request supplies the final status. */ }
+      if (!publishedMode && !finished && !controller.signal.aborted) timer = window.setTimeout(() => void cached(), 3500)
     }
-    void showProgress()
-    loadPhase('live').then(result => {
-      if (!controller.signal.aborted) setState({ key, data: result, loading: false, error: null })
+    void cached()
+    load('live').then(data => {
+      if (!controller.signal.aborted) display(data, false)
     }).catch(reason => {
-      if (!controller.signal.aborted) setState(current => ({
-        key, data: current?.key === key ? current.data : null, loading: false,
-        error: reason instanceof Error ? reason.message : 'Не удалось загрузить вакансии',
-      }))
-    }).finally(() => {
-      finished = true
-      window.clearTimeout(timer)
-    })
-    return () => {
-      finished = true
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [filters, key, reloadToken])
+      if (!controller.signal.aborted) setState(previous => ({ key, data: previous?.key === key ? previous.data : null,
+        loading: false, error: reason instanceof Error ? reason.message : 'Не удалось загрузить вакансии' }))
+    }).finally(() => { finished = true; window.clearTimeout(timer) })
+    return () => { finished = true; window.clearTimeout(timer); controller.abort() }
+  }, [upstream, key, reloadToken])
 
-  return state?.key === key ? state : { data: null, loading: true, error: null }
+  const data = useMemo(() => raw ? projectCatalog(raw.items, filters, raw.sources, clock) : null, [raw, filters, clock])
+  return { data, loading: state?.key !== key || state.loading, error: state?.key === key ? state.error : null }
+}
+
+function deadlines(job: Vacancy) {
+  const values = [Date.parse(job.verifiedAt) + feedLifetime]
+  if (job.validThrough) values.push(Date.parse(job.validThrough.length === 10 ? job.validThrough + 'T23:59:59Z' : job.validThrough))
+  if (job.isTelegram && job.publishedAt) values.push(Date.parse(job.publishedAt) + 30 * 86400_000)
+  return values
 }

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, Building2, ChevronDown, ChevronRight, CircleHelp, Globe2, Layers3, Search, Wallet, X } from 'lucide-react'
-import type { Salary, Vacancy } from '../types'
+import { domains, type Domain, type Salary, type Vacancy } from '../types'
+import { matchesDomain } from '../lib/creativeRoles'
+import { domainLabels } from '../lib/utils'
 import { distribution, groupOffers, measureNames, periodNames, quantile, quotedValue, salaryKey, taxNames, type Measure } from '../lib/salaryMarket'
 
 type Slice = 'market' | 'company' | 'title'
@@ -16,9 +18,9 @@ function pairLabel(key: string) {
 }
 
 export function SalaryView({items,loading,checked,onOpen}:{
-  items:Vacancy[]; loading:boolean;checked?:string;onOpen:(job:Vacancy)=>void
+  items:Vacancy[]; loading:boolean;checked?:string | null;onOpen:(job:Vacancy)=>void
 }) {
-  const [domain,setDomain] = useState('')
+  const [domain,setDomain] = useState<Domain | ''>('')
   const [country,setCountry] = useState('')
   const [selection,setSelection] = useState('')
   const [measure,setMeasure] = useState<Measure>('min')
@@ -31,7 +33,7 @@ export function SalaryView({items,loading,checked,onOpen}:{
   const [groupLimit,setGroupLimit] = useState(10)
   const [showUnspecified,setShowUnspecified] = useState(false)
   const countries = useMemo(()=>[...new Map(items.filter(j=>j.countryCode && j.country).map(j=>[j.countryCode!,j.country!])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'ru')),[items])
-  const region = useMemo(()=>items.filter(j=>(!country || j.countryCode===country) && (!domain || j.domain===domain)),[items,country,domain])
+  const region = useMemo(()=>items.filter(j=>(!country || j.countryCode===country) && (!domain || matchesDomain(j,domain))),[items,country,domain])
   const cohorts = useMemo(()=>{
     const counts = new Map<string,number>()
     for(const j of region){const key=salaryKey(j.salary);if(key) counts.set(key,(counts.get(key)??0)+1)}
@@ -64,10 +66,10 @@ export function SalaryView({items,loading,checked,onOpen}:{
   const rangeText=(b:typeof bars[number])=>b.max===null?'от '+money(b.min,currency):money(b.min,currency)+' – < '+money(b.max,currency)
   return <section className="pay-view">
     <header className="pay-heading"><div><h1>Зарплаты</h1><p>Сколько предлагают работодатели в открытых вакансиях Work &amp; Job.</p></div>
-      {loading && <small className="pay-loading" role="status">Обновляем выборку…</small>}{checked&&<span className="pay-date"><i/>Ленты сверены <time dateTime={checked}>{new Date(checked).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time></span>}</header>
+      {loading && <small className="pay-loading" role="status">Обновляем выборку…</small>}{checked&&<span className="pay-date"><i/>Последняя сверка источника <time dateTime={checked}>{new Date(checked).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time></span>}</header>
     <div className="pay-controls">
       <label>Страна<select value={country} onChange={e=>{setCountry(e.target.value);clearDetails()}}><option value="">Все страны</option>{countries.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>
-      <label>Направление<select value={domain} onChange={e=>{setDomain(e.target.value);clearDetails()}}><option value="">Все направления</option><option value="bim">BIM и проектирование</option><option value="design">Дизайн</option><option value="it">IT и разработка</option><option value="other">Другое</option></select></label>
+      <label>Направление<select aria-label="Направление" value={domain} onChange={e=>{setDomain(e.target.value as Domain | '');clearDetails()}}><option value="">Все направления</option>{domains.map(id=><option key={id} value={id}>{domainLabels[id]}</option>)}</select></label>
       <label>Условия оплаты<select value={cohort} onChange={e=>{setSelection(e.target.value);clearDetails()}}>{!cohorts.length&&<option value="">Нет сопоставимых сумм</option>}{cohorts.map(([key,n])=><option key={key} value={key}>{pairLabel(key)} ({number.format(n)})</option>)}</select></label>
       <label>Сравнивать по<select value={measure} onChange={e=>{setMeasure(e.target.value as Measure);clearDetails()}}>{Object.entries(measureNames).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
     </div>

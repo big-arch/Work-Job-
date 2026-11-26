@@ -8,7 +8,7 @@ interface CacheEntry {
   fetchedAt: string
 }
 
-export const CACHE_PREFIX = 'workjob-fresh-v2:'
+export const CACHE_PREFIX = 'workjob-fresh-v3:'
 const cachePath = resolve('data/provider-cache.json')
 
 export function loadCache() {

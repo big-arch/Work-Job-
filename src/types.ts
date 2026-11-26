@@ -1,6 +1,7 @@
-export const sourceIds = ['hh', 'remotive', 'remoteok', 'arbeitnow', 'jobicy', 'wwr', 'greenhouse', 'ashby', 'lever', 'telegram', 'egis', 'sixt', 'endava', 'aecom', 'ramboll', 'trudvsem', 'habr', 'superjob', 'yandex', 'kaspersky'] as const
+export const sourceIds = ['hh', 'remotive', 'remoteok', 'arbeitnow', 'jobicy', 'wwr', 'greenhouse', 'ashby', 'lever', 'telegram', 'egis', 'sixt', 'endava', 'aecom', 'ramboll', 'trudvsem', 'habr', 'superjob', 'yandex', 'kaspersky', 'ubisoft', 'gameloft', 'cdprojekt', 'peoplecanfly', 'epicgames', 'riotgames', '2k'] as const
 export type SourceId = typeof sourceIds[number]
-export type Domain = 'it' | 'bim' | 'design' | 'other'
+export const domains = ['bim', 'it', 'design', '3d', 'animation', 'other'] as const
+export type Domain = typeof domains[number]
 export type WorkFormat = 'remote' | 'hybrid' | 'office' | 'unspecified'
 export type SourceStatus = 'online' | 'degraded' | 'unavailable' | 'disabled'
 
@@ -47,6 +48,7 @@ export interface Vacancy {
 }
 
 export interface SearchFilters {
+  skill?: string
   withSalary?: string
   postedWithin?: string
   city?: string
@@ -79,9 +81,10 @@ export interface CountryFacet {
 export interface VacancyResponse {
   items: Vacancy[]
   total: number
-  fetchedAt: string
+  fetchedAt: string | null
   sources: SourceHealth[]
   facets: {
+    skills?: { name: string; count: number }[]
     countries: CountryFacet[]
     domains: { id: Domain; count: number }[]
   }

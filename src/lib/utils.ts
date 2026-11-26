@@ -4,6 +4,8 @@ export const domainLabels: Record<Domain, string> = {
   it: 'IT и разработка',
   bim: 'BIM и проектирование',
   design: 'Дизайн',
+  '3d': '3D и VFX',
+  animation: 'Анимация',
   other: 'Другое',
 }
 

@@ -42,6 +42,10 @@ export function plainText(value: unknown, maxLength = 14_000) {
     .replace(/&mdash;/gi, '—')
     .replace(/&laquo;/gi, '«')
     .replace(/&raquo;/gi, '»')
+    .replace(/&#(\d{1,7});/g, (entity, digits: string) => {
+      const value = Number(digits)
+      return value > 0 && value <= 0x10ffff ? String.fromCodePoint(value) : entity
+    })
     .replace(/\r/g, '')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s+/g, '\n')

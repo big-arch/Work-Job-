@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import type { SearchFilters, SourceHealth, Vacancy } from '../src/types'
 import { providers, restrictedSources } from '../server/registry'
 import { appConfig } from '../server/config'
+import { studios } from '../server/providers/greenhouse'
 import { boards } from '../server/providers/cityBoards'
 import { normalizeSearch } from '../server/normalize'
 import type { PublicCatalog } from '../src/lib/publicCatalogTypes'
@@ -14,7 +15,7 @@ const fetchedAt = new Date().toISOString()
 const catalog: PublicCatalog = {version:1,fetchedAt,items:[],matches:{},sources:[]}
 const byId = new Map<string,Vacancy>()
 const matches = new Map<string,Set<string>>()
-const publicIds = new Set(['egis','sixt','endava','ramboll','aecom','yandex','kaspersky','habr','trudvsem','remotive','remoteok','arbeitnow','jobicy','wwr','greenhouse','ashby','lever'])
+const publicIds = new Set([...boards.map(b=>b.id),...studios.map(b=>b.id),'yandex','kaspersky','habr','trudvsem','remotive','remoteok','arbeitnow','jobicy','wwr','greenhouse','ashby','lever'])
 const publicChannels = new Set(appConfig.telegramChannels.filter(name=>!appConfig.telegramGroups.includes(name)).map(name=>'telegram:'+name))
 const publicProviders = providers.filter(p=>publicIds.has(p.id)||publicChannels.has(p.id))
 const next = [...publicProviders]
@@ -22,7 +23,7 @@ async function collect() {
   for (let provider = next.shift(); provider; provider = next.shift()) {
     const ids = new Set<string>()
     const smart = boards.some(b => b.id===provider.id)
-    const queries = smart ? ['', 'BIM'] : provider.id==='habr' ? ['', 'BIM', 'Revit', 'Python', 'Product Designer'] : ['']
+    const queries = smart && !['ubisoft','gameloft','cdprojekt','peoplecanfly'].includes(provider.id) ? ['', 'BIM'] : provider.id==='habr' ? ['', 'BIM', 'Revit', 'Python', 'Product Designer', '3D', 'аниматор'] : ['']
     let successes=0, partial=false
     for (const q of queries) {
       try {
@@ -51,7 +52,7 @@ async function collect() {
     const status:SourceHealth['status'] = !partial && successes===queries.length?'online':successes?'degraded':'unavailable'
     catalog.sources.push({id:provider.id, name:provider.name,kind:provider.kind,homeUrl:provider.homeUrl,
       note:provider.note,status,count:ids.size,error:!partial && successes===queries.length?null:successes?'Часть страниц недоступна. Показаны полученные записи.':'Источник не ответил при обновлении лент.',
-      fetchedAt:successes?fetchedAt:null})
+      fetchedAt:successes?new Date().toISOString():null})
     console.log(provider.id,status,ids.size)
   }
 }
